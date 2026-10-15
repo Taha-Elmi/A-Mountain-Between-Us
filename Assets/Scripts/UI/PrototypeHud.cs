@@ -34,11 +34,20 @@ namespace Farhad
             GUI.Label(new Rect(40f, 1080f - 90f, width - 80f, 30f),
                 "A / D  move     Space  jump     Left mouse  strike     Right mouse  knock and listen for hollow rock", small);
             GUI.Label(new Rect(40f, 1080f - 56f, width - 80f, 30f),
-                mountain.DebugReveal ? "F1  hide hollow rock (debug: ON)" : "F1  reveal hollow rock (debug)", small);
+                mountain.DebugReveal
+                    ? $"F1  hide hollow rock (debug: ON)     strain {farhad.Strain:0.0} / {farhad.strainLimit:0}"
+                    : "F1  reveal hollow rock (debug)", small);
 
-            if (goal.Reached)
+            if (farhad.IsDead)
+            {
+                GUI.Label(new Rect(0f, 300f, width, 80f), "The mountain fell on Farhad.", large);
+                GUI.Label(new Rect(0f, 380f, width, 40f), "Press R to try again", Centered(small));
+            }
+            else if (goal.Reached)
                 GUI.Label(new Rect(0f, 300f, width, 80f), "You reached the other side of the mountain.", large);
         }
+
+        static GUIStyle Centered(GUIStyle style) => new(style) { alignment = TextAnchor.MiddleCenter };
 
         static void DrawRect(Rect rect, Color color)
         {

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Farhad
 {
-    // Smoothly follows the target while keeping the view inside the world bounds.
+    // Smoothly follows the target while keeping the view inside the world bounds, and can shake.
     [RequireComponent(typeof(Camera))]
     public class CameraFollow : MonoBehaviour
     {
@@ -14,8 +14,26 @@ namespace Farhad
 
         Camera cam;
         Vector3 velocity;
+        Vector3 followPosition;
+        float shakeAmount;
+        float shakeDuration;
+        float shakeEnd;
 
-        void Awake() => cam = GetComponent<Camera>();
+        void Awake()
+        {
+            cam = GetComponent<Camera>();
+            followPosition = transform.position;
+        }
+
+        public void Shake(float amount, float duration)
+        {
+            // A new shake never weakens one already running.
+            float remaining = Mathf.Max(0f, shakeEnd - Time.time);
+            if (amount * duration < shakeAmount * remaining) return;
+            shakeAmount = amount;
+            shakeDuration = duration;
+            shakeEnd = Time.time + duration;
+        }
 
         void LateUpdate()
         {
@@ -27,8 +45,13 @@ namespace Farhad
             goal.x = ClampAxis(goal.x, minBounds.x + halfWidth, maxBounds.x - halfWidth);
             goal.y = ClampAxis(goal.y, minBounds.y + halfHeight, maxBounds.y - halfHeight);
 
-            var next = new Vector3(goal.x, goal.y, transform.position.z);
-            transform.position = Vector3.SmoothDamp(transform.position, next, ref velocity, smoothTime);
+            var next = new Vector3(goal.x, goal.y, followPosition.z);
+            followPosition = Vector3.SmoothDamp(followPosition, next, ref velocity, smoothTime);
+
+            var shake = Vector3.zero;
+            if (Time.time < shakeEnd)
+                shake = (Vector3)Random.insideUnitCircle * (shakeAmount * (shakeEnd - Time.time) / shakeDuration);
+            transform.position = followPosition + shake;
         }
 
         static float ClampAxis(float value, float min, float max) =>

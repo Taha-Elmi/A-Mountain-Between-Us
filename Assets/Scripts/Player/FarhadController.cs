@@ -1,15 +1,18 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace Farhad
 {
     // Walking, jumping, and working the rock: left mouse strikes, right mouse knocks and listens.
+    // Striking rock that isn't hollow strains the mountain; strain it too far and it falls on him.
     [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D))]
     public class FarhadController : MonoBehaviour
     {
         public MountainGrid mountain;
         public RockSounds sounds;
+        public Rockfall rockfall;
         public SpriteRenderer body;
         public SpriteRenderer targetMarker;
 
@@ -32,9 +35,18 @@ namespace Farhad
         public float staminaRegen = 15f;
         public float regenDelay = 0.8f;
 
+        [Header("Mountain strain")]
+        [Tooltip("Strikes on non-hollow rock in quick succession before the mountain collapses.")]
+        public float strainLimit = 4f;
+        [Tooltip("Strain shed per second once Farhad stops striking non-hollow rock.")]
+        public float strainRecovery = 0.35f;
+        public float strainRecoveryDelay = 1.5f;
+
         public float Stamina { get; private set; }
         public float MaxStamina => maxStamina;
         public bool OutOfBreath => Time.time - lastFailedTime < 1.2f;
+        public float Strain { get; private set; }
+        public bool IsDead { get; private set; }
 
         Rigidbody2D rb;
         CapsuleCollider2D col;
@@ -46,6 +58,8 @@ namespace Farhad
         float nextStrikeTime;
         float lastExertTime;
         float lastFailedTime = float.NegativeInfinity;
+        float lastStrainTime;
+        float deathTime;
 
         Vector2 ReachOrigin => (Vector2)transform.position + new Vector2(0f, 0.3f);
 
@@ -64,6 +78,13 @@ namespace Farhad
             var kb = Keyboard.current;
             var mouse = Mouse.current;
             if (kb == null || mouse == null) return;
+
+            if (IsDead)
+            {
+                if (kb.rKey.wasPressedThisFrame && Time.time - deathTime > 1f)
+                    SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                return;
+            }
 
             moveInput = 0f;
             if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) moveInput -= 1f;
@@ -88,10 +109,13 @@ namespace Farhad
 
             if (Time.time - lastExertTime > regenDelay)
                 Stamina = Mathf.Min(maxStamina, Stamina + staminaRegen * Time.deltaTime);
+            if (Time.time - lastStrainTime > strainRecoveryDelay)
+                Strain = Mathf.Max(0f, Strain - strainRecovery * Time.deltaTime);
         }
 
         void FixedUpdate()
         {
+            if (IsDead) return;
             float vy = rb.linearVelocity.y;
             if (jumpQueued)
             {
@@ -114,6 +138,32 @@ namespace Farhad
 
             bool broke = mountain.Strike(cell);
             sounds.PlayStrike(rock, broke);
+            if (rock != RockType.Hollow) AddStrain();
+        }
+
+        void AddStrain()
+        {
+            Strain += 1f;
+            lastStrainTime = Time.time;
+            if (Strain >= strainLimit)
+            {
+                Die();
+                return;
+            }
+            float severity = Strain / strainLimit;
+            sounds.PlayRumble(severity);
+            rockfall.Warn(transform.position + Vector3.up, severity);
+        }
+
+        void Die()
+        {
+            IsDead = true;
+            deathTime = Time.time;
+            moveInput = 0f;
+            rb.linearVelocity = Vector2.zero;
+            rb.simulated = false;
+            targetMarker.enabled = false;
+            rockfall.Collapse(this);
         }
 
         void KnockAt(Vector3Int cell, RockType rock)

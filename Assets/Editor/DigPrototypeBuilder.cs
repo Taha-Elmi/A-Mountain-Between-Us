@@ -73,6 +73,10 @@ namespace Farhad.EditorTools
             mountain.hollowTile = hollowTile;
             mountain.hardTile = hardTile;
 
+            var rockfall = grid.AddComponent<Rockfall>();
+            rockfall.mountain = mountain;
+            rockfall.debrisSprite = solidSprite;
+
             // Goal on the far side
             var goalObject = new GameObject("Goal (Far Side)");
             goalObject.transform.position = generator.GoalPoint;
@@ -108,6 +112,7 @@ namespace Farhad.EditorTools
             var farhad = farhadObject.AddComponent<FarhadController>();
             farhad.mountain = mountain;
             farhad.sounds = sounds;
+            farhad.rockfall = rockfall;
             farhad.body = body;
             farhad.targetMarker = marker;
 
@@ -124,6 +129,7 @@ namespace Farhad.EditorTools
             follow.target = farhadObject.transform;
             follow.minBounds = new Vector2(0f, 0f);
             follow.maxBounds = new Vector2(generator.width, generator.height + 2f);
+            rockfall.cameraFollow = follow;
 
             var hud = new GameObject("Prototype HUD").AddComponent<PrototypeHud>();
             hud.farhad = farhad;

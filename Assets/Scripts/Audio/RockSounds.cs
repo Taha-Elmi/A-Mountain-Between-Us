@@ -11,7 +11,7 @@ namespace Farhad
         const int SampleRate = 44100;
 
         AudioSource source;
-        AudioClip solidHit, hollowHit, hardHit, rockBreak, knockSolid, knockHollow;
+        AudioClip solidHit, hollowHit, hardHit, rockBreak, knockSolid, knockHollow, rumble, rockfall;
         readonly System.Random noise = new(7);
 
         void Awake()
@@ -36,6 +36,16 @@ namespace Farhad
 
             knockHollow = Make("KnockHollow", 1.1f, t =>
                 (Ring(t) + Ring(t - 0.18f) * 0.45f + Ring(t - 0.36f) * 0.2f) * 0.8f);
+
+            // The mountain groaning: deep noise that swells and fades.
+            var groan = Brown();
+            rumble = Make("Rumble", 1.2f, t => groan() * Mathf.Sin(Mathf.PI * t / 1.2f));
+
+            // The collapse: a long roar with rocks cracking through it.
+            var roar = Brown();
+            rockfall = Make("Rockfall", 2.4f, t =>
+                roar() * Mathf.Min(1f, t * 20f) * Decay(t, 1.2f) * 1.3f
+                + (noise.NextDouble() < 0.002 ? 1f : 0f) + Noise() * Decay(t, 3f) * 0.25f);
         }
 
         public void PlayStrike(RockType rock, bool broke)
@@ -52,6 +62,11 @@ namespace Farhad
 
         public void PlayKnock(bool hollowAnswered) => Play(hollowAnswered ? knockHollow : knockSolid, 0.7f);
 
+        // severity: 0..1, how close the mountain is to collapsing.
+        public void PlayRumble(float severity) => Play(rumble, 0.3f + 0.7f * severity);
+
+        public void PlayRockfall() => Play(rockfall, 1f);
+
         void Play(AudioClip clip, float volume)
         {
             source.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
@@ -64,6 +79,17 @@ namespace Farhad
         static float Sine(float freq, float t) => Mathf.Sin(2f * Mathf.PI * freq * t);
         static float Decay(float t, float rate) => Mathf.Exp(-rate * t);
         float Noise() => (float)(noise.NextDouble() * 2.0 - 1.0);
+
+        // Low, rumbling noise: white noise run through a leaky integrator.
+        Func<float> Brown()
+        {
+            float level = 0f;
+            return () =>
+            {
+                level = (level + 0.02f * Noise()) / 1.02f;
+                return level * 3.5f;
+            };
+        }
 
         static AudioClip Make(string name, float seconds, Func<float, float> wave)
         {
