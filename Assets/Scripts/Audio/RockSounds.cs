@@ -11,7 +11,7 @@ namespace Farhad
         const int SampleRate = 44100;
 
         AudioSource source;
-        AudioClip solidHit, hollowHit, hardHit, rockBreak, knockSolid, knockHollow, rumble, rockfall;
+        AudioClip solidHit, hollowHit, hardHit, rockBreak, knockSolid, knockHollow, rumble, rockfall, thought;
         readonly System.Random noise = new(7);
 
         void Awake()
@@ -46,6 +46,11 @@ namespace Farhad
             rockfall = Make("Rockfall", 2.4f, t =>
                 roar() * Mathf.Min(1f, t * 20f) * Decay(t, 1.2f) * 1.3f
                 + (noise.NextDouble() < 0.002 ? 1f : 0f) + Noise() * Decay(t, 3f) * 0.25f);
+
+            // Thinking of Shirin: a soft, warm swell.
+            thought = Make("Thought", 1.6f, t =>
+                (Sine(392f, t) * 0.4f + Sine(587f, t) * 0.25f + Sine(784f, t) * 0.1f)
+                * Mathf.Min(1f, t * 4f) * Decay(t, 2.2f));
         }
 
         public void PlayStrike(RockType rock, bool broke)
@@ -66,6 +71,8 @@ namespace Farhad
         public void PlayRumble(float severity) => Play(rumble, 0.3f + 0.7f * severity);
 
         public void PlayRockfall() => Play(rockfall, 1f);
+
+        public void PlayThought() => Play(thought, 0.6f);
 
         void Play(AudioClip clip, float volume)
         {

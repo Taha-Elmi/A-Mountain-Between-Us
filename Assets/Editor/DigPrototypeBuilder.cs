@@ -39,6 +39,7 @@ namespace Farhad.EditorTools
             var markerSprite = MakeSprite("target_marker", MarkerTexture());
             var farhadSprite = MakeSprite("farhad", FarhadTexture());
             var beaconSprite = MakeSprite("goal_beacon", BeaconTexture());
+            var carvingSprite = MakeSprite("shirin_carving", CarvingTexture());
 
             var solidTile = MakeTile("RockSolid", solidSprite, Tile.ColliderType.Grid);
             var hollowTile = MakeTile("RockHollow", solidSprite, Tile.ColliderType.Grid); // same look as solid on purpose
@@ -116,6 +117,11 @@ namespace Farhad.EditorTools
             farhad.body = body;
             farhad.targetMarker = marker;
 
+            var longing = farhadObject.AddComponent<Longing>();
+            longing.mountain = mountain;
+            longing.backWallMap = backWall;
+            longing.carvingSprite = carvingSprite;
+
             // Camera
             var cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
             cameraObject.transform.position = farhadObject.transform.position + new Vector3(0f, 1.5f, -10f);
@@ -133,6 +139,7 @@ namespace Farhad.EditorTools
 
             var hud = new GameObject("Prototype HUD").AddComponent<PrototypeHud>();
             hud.farhad = farhad;
+            hud.longing = longing;
             hud.mountain = mountain;
             hud.goal = goal;
 
@@ -281,6 +288,32 @@ namespace Farhad.EditorTools
                 float across = 1f - Mathf.Abs(x - w / 2f) / (w / 2f);
                 float up = 1f - y / (float)h;
                 tex.SetPixel(x, y, new Color(1f, 0.85f, 0.5f, across * across * up * 0.8f));
+            }
+            tex.Apply();
+            return tex;
+        }
+
+        // 256x256 px (2x2 units): a pale, scratched outline of a woman's face in profile, facing left.
+        static Texture2D CarvingTexture()
+        {
+            const int size = 256;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var line = new Color(0.95f, 0.86f, 0.72f, 1f);
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float fx = (x - 128f) / 60f, fy = (y - 132f) / 80f;
+                float face = Mathf.Abs(fx * fx + fy * fy - 1f);                     // oval of the face
+                float hx = (x - 146f) / 78f, hy = (y - 150f) / 92f;
+                float hair = Mathf.Abs(hx * hx + hy * hy - 1f);                     // hair falling behind
+                bool hairSide = x > 128 && y > 70;
+                bool eye = Mathf.Abs(x - 100) < 9 && Mathf.Abs(y - 150) < 3;
+                bool brow = Mathf.Abs(x - 100) < 14 && Mathf.Abs(y - 165 - (x - 100) * 0.15f) < 2;
+                bool lips = Mathf.Abs(x - 92) < 8 && Mathf.Abs(y - 98) < 2;
+                bool neck = (Mathf.Abs(x - 110) < 2 || Mathf.Abs(x - 146) < 2) && y < 58 && y > 10;
+
+                bool ink = face < 0.06f || (hairSide && hair < 0.05f) || eye || brow || lips || neck;
+                tex.SetPixel(x, y, ink ? line : Color.clear);
             }
             tex.Apply();
             return tex;

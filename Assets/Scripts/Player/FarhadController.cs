@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -25,14 +26,13 @@ namespace Farhad
         public float strikeInterval = 0.3f;
         public float knockRadius = 2.5f;
 
+        // Stamina never refills on its own: only thinking of Shirin restores it (see Longing).
         [Header("Stamina")]
         public float maxStamina = 100f;
         public float solidStrikeCost = 8f;
         public float hollowStrikeCost = 3f;
         public float hardStrikeCost = 8f;
         public float knockCost = 4f;
-        public float staminaRegen = 15f;
-        public float regenDelay = 0.8f;
 
         [Header("Mountain strain")]
         [Tooltip("Strikes on non-hollow rock in quick succession before the mountain collapses.")]
@@ -46,6 +46,12 @@ namespace Farhad
         public bool OutOfBreath => Time.time - lastFailedTime < 1.2f;
         public float Strain { get; private set; }
         public bool IsDead { get; private set; }
+        // While dreaming Farhad stands frozen and ignores input.
+        public bool IsDreaming { get; set; }
+        public bool IsStill => moveInput == 0f && rb.linearVelocity.sqrMagnitude < 0.01f;
+
+        // Raised after every strike that landed (stamina was spent), with the rock that was struck.
+        public event Action<RockType> Struck;
 
         Rigidbody2D rb;
         CapsuleCollider2D col;
@@ -55,11 +61,11 @@ namespace Farhad
         float moveInput;
         bool jumpQueued;
         float nextStrikeTime;
-        float lastExertTime;
         float lastFailedTime = float.NegativeInfinity;
         float lastStrainTime;
         float deathTime;
 
+        public void RestoreStamina(float amount) => Stamina = Mathf.Min(maxStamina, Stamina + amount);
 
         void Awake()
         {
@@ -85,6 +91,12 @@ namespace Farhad
             }
 
             moveInput = 0f;
+            if (IsDreaming)
+            {
+                targetMarker.enabled = false;
+                return;
+            }
+
             if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) moveInput -= 1f;
             if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) moveInput += 1f;
             if ((kb.spaceKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame || kb.upArrowKey.wasPressedThisFrame) && IsGrounded())
@@ -105,8 +117,6 @@ namespace Farhad
                 else if (mouse.rightButton.wasPressedThisFrame) KnockAt(cell, rock);
             }
 
-            if (Time.time - lastExertTime > regenDelay)
-                Stamina = Mathf.Min(maxStamina, Stamina + staminaRegen * Time.deltaTime);
             if (Time.time - lastStrainTime > strainRecoveryDelay)
                 Strain = Mathf.Max(0f, Strain - strainRecovery * Time.deltaTime);
         }
@@ -136,6 +146,7 @@ namespace Farhad
 
             bool broke = mountain.Strike(cell);
             sounds.PlayStrike(rock, broke);
+            Struck?.Invoke(rock);
             if (rock != RockType.Hollow) AddStrain();
         }
 
@@ -179,7 +190,6 @@ namespace Farhad
                 return false;
             }
             Stamina -= cost;
-            lastExertTime = Time.time;
             return true;
         }
 

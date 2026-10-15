@@ -32,6 +32,9 @@ namespace Farhad
 
         public bool DebugReveal => debugReveal;
 
+        // Chance that a knock makes nearby solid rock ring as if hollow. Set by Farhad's madness.
+        public float FalseEchoChance { get; set; }
+
         public RockType GetRock(Vector3Int cell)
         {
             var tile = rockMap.GetTile(cell);
@@ -64,7 +67,8 @@ namespace Farhad
             return false;
         }
 
-        // Makes hollow rock around the cell ring back for a moment. Returns how many hollow cells answered.
+        // Makes hollow rock around the cell ring back for a moment. Returns how many cells answered,
+        // including solid rock that only seemed to answer (see FalseEchoChance).
         public int Knock(Vector3Int cell, float radius)
         {
             int answered = 0;
@@ -74,7 +78,9 @@ namespace Farhad
             {
                 if (x * x + y * y > radius * radius) continue;
                 var c = cell + new Vector3Int(x, y, 0);
-                if (GetRock(c) != RockType.Hollow) continue;
+                var rock = GetRock(c);
+                bool lies = rock == RockType.Solid && Random.value < FalseEchoChance;
+                if (rock != RockType.Hollow && !lies) continue;
                 echoEnds[c] = Time.time + echoDuration;
                 answered++;
             }
