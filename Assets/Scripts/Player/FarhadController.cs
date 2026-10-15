@@ -22,7 +22,6 @@ namespace Farhad
         public LayerMask groundMask = ~0;
 
         [Header("Working the rock")]
-        public float reach = 2.2f;
         public float strikeInterval = 0.3f;
         public float knockRadius = 2.5f;
 
@@ -61,7 +60,6 @@ namespace Farhad
         float lastStrainTime;
         float deathTime;
 
-        Vector2 ReachOrigin => (Vector2)transform.position + new Vector2(0f, 0.3f);
 
         void Awake()
         {
@@ -96,7 +94,7 @@ namespace Farhad
             var cell = mountain.rockMap.WorldToCell(aim);
             Vector2 cellCenter = mountain.rockMap.GetCellCenterWorld(cell);
             var rock = mountain.GetRock(cell);
-            bool inReach = Vector2.Distance(ReachOrigin, cellCenter) <= reach;
+            bool inReach = IsNextTo(cell);
 
             body.flipX = aim.x < transform.position.x;
             UpdateMarker(cellCenter, rock, inReach);
@@ -193,6 +191,19 @@ namespace Farhad
             foreach (var hit in groundHits)
                 if (hit != col) return true;
             return false;
+        }
+
+        // Only rock directly beside, above, or below Farhad's body can be struck; never corners.
+        bool IsNextTo(Vector3Int cell)
+        {
+            const float inset = 0.05f;
+            var bounds = col.bounds;
+            var min = mountain.rockMap.WorldToCell(new Vector3(bounds.min.x + inset, bounds.min.y + inset));
+            var max = mountain.rockMap.WorldToCell(new Vector3(bounds.max.x - inset, bounds.max.y - inset));
+            bool inBodyColumns = cell.x >= min.x && cell.x <= max.x;
+            bool inBodyRows = cell.y >= min.y && cell.y <= max.y;
+            return (inBodyRows && (cell.x == min.x - 1 || cell.x == max.x + 1))
+                || (inBodyColumns && (cell.y == min.y - 1 || cell.y == max.y + 1));
         }
 
         void UpdateMarker(Vector2 cellCenter, RockType rock, bool inReach)
