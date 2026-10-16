@@ -15,6 +15,7 @@ namespace Farhad
         public RockSounds sounds;
         public Rockfall rockfall;
         public SpriteRenderer body;
+        public Animator animator; // optional: drives the "Walking" state of his drawn animation
         public SpriteRenderer targetMarker;
 
         [Header("Movement")]
@@ -191,6 +192,15 @@ namespace Farhad
             }
             Stamina -= cost;
             return true;
+        }
+
+        static readonly int WalkingId = Animator.StringToHash("Walking");
+
+        void LateUpdate()
+        {
+            // Walk only while actually moving, so pushing against a wall shows him standing.
+            if (animator != null)
+                animator.SetBool(WalkingId, !IsDead && moveInput != 0f && Mathf.Abs(rb.linearVelocity.x) > 0.1f && IsGrounded());
         }
 
         bool IsGrounded()

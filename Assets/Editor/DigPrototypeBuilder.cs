@@ -92,9 +92,22 @@ namespace Farhad.EditorTools
             // Farhad
             var farhadObject = new GameObject("Farhad");
             farhadObject.transform.position = generator.SpawnPoint + new Vector3(0f, 0.9f, 0f); // capsule is 1.75 tall, centered
-            var body = farhadObject.AddComponent<SpriteRenderer>();
-            body.sprite = farhadSprite;
+
+            // The drawn art (pivot at his feet) sits on a child at the bottom of the capsule; without
+            // the art, the generated placeholder (pivot at its center) sits on Farhad himself.
+            var body = new GameObject("Sprite").AddComponent<SpriteRenderer>();
+            body.transform.SetParent(farhadObject.transform, false);
             body.sortingOrder = 10;
+            Animator animator = null;
+            if (FarhadArtSetup.HasArt)
+            {
+                var controller = FarhadArtSetup.Build();
+                body.transform.localPosition = new Vector3(0f, -0.875f, 0f);
+                body.sprite = FarhadArtSetup.IdleSprite;
+                animator = body.gameObject.AddComponent<Animator>();
+                animator.runtimeAnimatorController = controller;
+            }
+            else body.sprite = farhadSprite;
             var rb = farhadObject.AddComponent<Rigidbody2D>();
             rb.gravityScale = 3f;
             rb.freezeRotation = true;
@@ -115,6 +128,7 @@ namespace Farhad.EditorTools
             farhad.sounds = sounds;
             farhad.rockfall = rockfall;
             farhad.body = body;
+            farhad.animator = animator;
             farhad.targetMarker = marker;
 
             var longing = farhadObject.AddComponent<Longing>();
