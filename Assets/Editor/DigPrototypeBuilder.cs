@@ -129,6 +129,11 @@ namespace Farhad.EditorTools
             farhad.rockfall = rockfall;
             farhad.body = body;
             farhad.animator = animator;
+            if (animator != null)
+            {
+                farhad.strikeImpactTime = FarhadArtSetup.StrikeImpactTime;
+                farhad.strikeDuration = FarhadArtSetup.StrikeDuration;
+            }
             farhad.targetMarker = marker;
 
             var longing = farhadObject.AddComponent<Longing>();

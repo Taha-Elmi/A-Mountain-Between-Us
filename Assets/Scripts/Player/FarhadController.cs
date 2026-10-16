@@ -23,8 +23,11 @@ namespace Farhad
         public float jumpHeight = 1.4f;
         public LayerMask groundMask = ~0;
 
+        // A strike is a swing: stamina is spent when it starts, the rock is hit at the impact moment
+        // (matched to the drawn animation), and he can't move or swing again until it ends.
         [Header("Working the rock")]
-        public float strikeInterval = 0.3f;
+        public float strikeImpactTime = 0.42f;
+        public float strikeDuration = 0.67f;
         public float knockRadius = 2.5f;
 
         // Stamina never refills on its own: only thinking of Shirin restores it (see Longing).
@@ -50,6 +53,7 @@ namespace Farhad
         // While dreaming Farhad stands frozen and ignores input.
         public bool IsDreaming { get; set; }
         public bool IsStill => moveInput == 0f && rb.linearVelocity.sqrMagnitude < 0.01f;
+        public bool IsSwinging => Time.time < swingEnd;
 
         // Raised after every strike that landed (stamina was spent), with the rock that was struck.
         public event Action<RockType> Struck;
@@ -61,7 +65,10 @@ namespace Farhad
         readonly List<Collider2D> groundHits = new();
         float moveInput;
         bool jumpQueued;
-        float nextStrikeTime;
+        float swingEnd;
+        float swingImpact;
+        bool swingLanded = true;
+        Vector3Int swingCell;
         float lastFailedTime = float.NegativeInfinity;
         float lastStrainTime;
         float deathTime;
@@ -98,6 +105,15 @@ namespace Farhad
                 return;
             }
 
+            if (!swingLanded && Time.time >= swingImpact) LandSwing();
+            if (IsSwinging)
+            {
+                // Mid-swing he is planted: no walking, jumping, turning, or new swings.
+                targetMarker.enabled = false;
+                UpdateStrain();
+                return;
+            }
+
             if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) moveInput -= 1f;
             if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) moveInput += 1f;
             if ((kb.spaceKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame || kb.upArrowKey.wasPressedThisFrame) && IsGrounded())
@@ -114,10 +130,15 @@ namespace Farhad
 
             if (inReach && rock != RockType.Empty)
             {
-                if (mouse.leftButton.isPressed && Time.time >= nextStrikeTime) StrikeAt(cell, rock);
+                if (mouse.leftButton.isPressed) StartSwing(cell, rock);
                 else if (mouse.rightButton.wasPressedThisFrame) KnockAt(cell, rock);
             }
 
+            UpdateStrain();
+        }
+
+        void UpdateStrain()
+        {
             if (Time.time - lastStrainTime > strainRecoveryDelay)
                 Strain = Mathf.Max(0f, Strain - strainRecovery * Time.deltaTime);
         }
@@ -134,9 +155,10 @@ namespace Farhad
             rb.linearVelocity = new Vector2(moveInput * moveSpeed, vy);
         }
 
-        void StrikeAt(Vector3Int cell, RockType rock)
+        static readonly int StrikeId = Animator.StringToHash("Strike");
+
+        void StartSwing(Vector3Int cell, RockType rock)
         {
-            nextStrikeTime = Time.time + strikeInterval;
             float cost = rock switch
             {
                 RockType.Hollow => hollowStrikeCost,
@@ -145,7 +167,21 @@ namespace Farhad
             };
             if (!TrySpend(cost)) return;
 
-            bool broke = mountain.Strike(cell);
+            swingCell = cell;
+            swingImpact = Time.time + strikeImpactTime;
+            swingEnd = Time.time + strikeDuration;
+            swingLanded = false;
+            moveInput = 0f;
+            if (animator != null) animator.SetTrigger(StrikeId);
+        }
+
+        void LandSwing()
+        {
+            swingLanded = true;
+            var rock = mountain.GetRock(swingCell);
+            if (rock == RockType.Empty) return;
+
+            bool broke = mountain.Strike(swingCell);
             sounds.PlayStrike(rock, broke);
             Struck?.Invoke(rock);
             if (rock != RockType.Hollow) AddStrain();
