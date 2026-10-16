@@ -8,9 +8,11 @@ using UnityEngine.Tilemaps;
 
 namespace Farhad.EditorTools
 {
-    // Builds the dig prototype scene with generated placeholder art, so it can be rebuilt at any time.
-    // Art spec: tiles are painted at 128x128 px and imported at 128 pixels per unit (1 tile = 1 unit);
-    // the camera shows 16.875 tiles vertically, so a tile is 64 px tall on a 1080p screen.
+    // Builds the dig prototype scene, so it can be rebuilt at any time. When the artist's background
+    // layers exist (see MountainArtLayout), the level is shaped by them; otherwise a made-up mountain
+    // is generated. Rock tiles are still generated placeholders, 1 tile = 1 unit.
+    // The camera shows 8.4 tiles vertically, so a tile is 128 px tall on a 1080p screen: tile art
+    // should be painted at 256x256 px to stay sharp at 4K.
     public static class DigPrototypeBuilder
     {
         const string ArtDir = "Assets/Art/Placeholder";
@@ -18,7 +20,7 @@ namespace Farhad.EditorTools
         const string PhysicsDir = "Assets/Physics";
         const string ScenePath = "Assets/Scenes/DigPrototype.unity";
         const int PixelsPerUnit = 128;
-        const float OrthographicSize = 1080f / 64f / 2f;
+        const float OrthographicSize = 1080f / 128f / 2f;
 
         [MenuItem("Farhad/Build Dig Prototype Scene")]
         public static void Build()
@@ -66,7 +68,17 @@ namespace Farhad.EditorTools
             generator.hollowTile = hollowTile;
             generator.hardTile = hardTile;
             generator.backWallTile = wallTile;
-            generator.Generate();
+            if (MountainArtLayout.HasArt)
+            {
+                var layout = MountainArtLayout.Analyze();
+                generator.Generate(layout.Shape, layout.BackWallShape, layout.Entrance, layout.Exit, layout.SpawnX);
+                layout.PlaceLayers(new GameObject("Background").transform);
+                // Rock is drawn only inside the artist's outline of the mountain.
+                foreach (var map in new[] { rock, backWall })
+                    map.GetComponent<TilemapRenderer>().maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
+            }
+            else generator.Generate();
+            MakeWorldBounds(generator.width, generator.height);
 
             var mountain = grid.AddComponent<MountainGrid>();
             mountain.rockMap = rock;
@@ -85,9 +97,12 @@ namespace Farhad.EditorTools
             goalTrigger.isTrigger = true;
             goalTrigger.size = new Vector2(3f, 4f);
             var goal = goalObject.AddComponent<GoalZone>();
-            var beacon = goalObject.AddComponent<SpriteRenderer>();
-            beacon.sprite = beaconSprite;
-            beacon.sortingOrder = -5;
+            if (!MountainArtLayout.HasArt) // with the art, the drawn palace marks the goal
+            {
+                var beacon = goalObject.AddComponent<SpriteRenderer>();
+                beacon.sprite = beaconSprite;
+                beacon.sortingOrder = -5;
+            }
 
             // Farhad
             var farhadObject = new GameObject("Farhad");
@@ -143,17 +158,19 @@ namespace Farhad.EditorTools
 
             // Camera
             var cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
-            cameraObject.transform.position = farhadObject.transform.position + new Vector3(0f, 1.5f, -10f);
+            cameraObject.transform.position = farhadObject.transform.position + new Vector3(0f, 1f, -10f);
             var cam = cameraObject.AddComponent<Camera>();
             cam.orthographic = true;
             cam.orthographicSize = OrthographicSize;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.62f, 0.66f, 0.78f);
+            // Shows only through gaps in the art, so it matches the night sky.
+            cam.backgroundColor = MountainArtLayout.HasArt ? new Color(0.13f, 0.13f, 0.15f) : new Color(0.62f, 0.66f, 0.78f);
             cameraObject.AddComponent<AudioListener>();
             var follow = cameraObject.AddComponent<CameraFollow>();
             follow.target = farhadObject.transform;
+            follow.offset = new Vector2(0f, 1f);
             follow.minBounds = new Vector2(0f, 0f);
-            follow.maxBounds = new Vector2(generator.width, generator.height + 2f);
+            follow.maxBounds = new Vector2(generator.width, generator.height);
             rockfall.cameraFollow = follow;
 
             var hud = new GameObject("Prototype HUD").AddComponent<PrototypeHud>();
@@ -168,6 +185,22 @@ namespace Farhad.EditorTools
             EditorBuildSettings.scenes = buildScenes.ToArray();
             AssetDatabase.SaveAssets();
             Debug.Log($"Dig prototype scene built at {ScenePath}");
+        }
+
+        // Invisible walls on both sides of the level and a ceiling over it.
+        static void MakeWorldBounds(int width, int height)
+        {
+            var bounds = new GameObject("World Bounds");
+            void Wall(string name, Vector2 center, Vector2 size)
+            {
+                var wall = new GameObject(name).AddComponent<BoxCollider2D>();
+                wall.transform.SetParent(bounds.transform, false);
+                wall.offset = center;
+                wall.size = size;
+            }
+            Wall("Left", new Vector2(-0.5f, height * 0.5f), new Vector2(1f, height * 2f));
+            Wall("Right", new Vector2(width + 0.5f, height * 0.5f), new Vector2(1f, height * 2f));
+            Wall("Ceiling", new Vector2(width * 0.5f, height + 0.5f), new Vector2(width + 2f, 1f));
         }
 
         static Tilemap MakeTilemap(Transform parent, string name, int sortingOrder)
