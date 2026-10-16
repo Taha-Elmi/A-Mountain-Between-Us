@@ -10,12 +10,14 @@ namespace Farhad.EditorTools
 {
     // Builds the dig prototype scene, so it can be rebuilt at any time. When the artist's background
     // layers exist (see MountainArtLayout), the level is shaped by them; otherwise a made-up mountain
-    // is generated. Rock tiles are still generated placeholders, 1 tile = 1 unit.
+    // is generated. Rock tiles come from Assets/Art/Tiles (see Tools/process_tiles.ps1) when they
+    // exist, else from generated placeholders; 1 tile = 1 unit.
     // The camera shows 8.4 tiles vertically, so a tile is 128 px tall on a 1080p screen: tile art
     // should be painted at 256x256 px to stay sharp at 4K.
     public static class DigPrototypeBuilder
     {
         const string ArtDir = "Assets/Art/Placeholder";
+        const string TileArtDir = "Assets/Art/Tiles";
         const string TilesDir = "Assets/Tiles";
         const string PhysicsDir = "Assets/Physics";
         const string ScenePath = "Assets/Scenes/DigPrototype.unity";
@@ -35,9 +37,10 @@ namespace Farhad.EditorTools
             EnsureFolder(TilesDir);
             EnsureFolder(PhysicsDir);
 
-            var solidSprite = MakeSprite("rock_solid", RockTexture(new Color(0.66f, 0.53f, 0.42f), new Color(0.44f, 0.33f, 0.27f), 11, true));
-            var hardSprite = MakeSprite("rock_hard", RockTexture(new Color(0.38f, 0.4f, 0.47f), new Color(0.2f, 0.21f, 0.27f), 23, true));
-            var wallSprite = MakeSprite("back_wall", RockTexture(new Color(0.24f, 0.19f, 0.17f), new Color(0.16f, 0.12f, 0.11f), 37, false));
+            // The artist's tiles (made by Tools/process_tiles.ps1) when they exist, else placeholders.
+            var solidSprite = TileArt("rock_solid") ?? MakeSprite("rock_solid", RockTexture(new Color(0.66f, 0.53f, 0.42f), new Color(0.44f, 0.33f, 0.27f), 11, true));
+            var hardSprite = TileArt("rock_hard") ?? MakeSprite("rock_hard", RockTexture(new Color(0.38f, 0.4f, 0.47f), new Color(0.2f, 0.21f, 0.27f), 23, true));
+            var wallSprite = TileArt("back_wall") ?? MakeSprite("back_wall", RockTexture(new Color(0.24f, 0.19f, 0.17f), new Color(0.16f, 0.12f, 0.11f), 37, false));
             var markerSprite = MakeSprite("target_marker", MarkerTexture());
             var farhadSprite = MakeSprite("farhad", FarhadTexture());
             var beaconSprite = MakeSprite("goal_beacon", BeaconTexture());
@@ -235,6 +238,30 @@ namespace Farhad.EditorTools
             material = new PhysicsMaterial2D("Frictionless") { friction = 0f, bounciness = 0f };
             AssetDatabase.CreateAsset(material, path);
             return material;
+        }
+
+        // A tile drawn by the artist, imported so it covers exactly one cell. Null if it doesn't exist.
+        static Sprite TileArt(string name)
+        {
+            string path = $"{TileArtDir}/{name}.png";
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) == null) return null;
+
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.GetSourceTextureWidthAndHeight(out int width, out _);
+            importer.spritePixelsPerUnit = width;
+            importer.mipmapEnabled = true; // drawn at twice the 1080p size
+            importer.filterMode = FilterMode.Trilinear;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            var settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.spriteMeshType = SpriteMeshType.FullRect;
+            settings.spriteAlignment = (int)SpriteAlignment.Center;
+            importer.SetTextureSettings(settings);
+            importer.SaveAndReimport();
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
         static Sprite MakeSprite(string name, Texture2D texture)

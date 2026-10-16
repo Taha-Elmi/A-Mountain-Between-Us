@@ -42,6 +42,12 @@ namespace Farhad
             float tint = Mathf.InverseLerp(0.3f, 1f, longing.Madness01) * 0.3f;
             if (tint > 0f) DrawRect(screen, new Color(MadnessTint.r, MadnessTint.g, MadnessTint.b, tint));
 
+            // Dark panels keep the white text readable over the white rock.
+            var panel = new Color(0f, 0f, 0f, 0.55f);
+            DrawRect(new Rect(24f, 26f, farhad.OutOfBreath ? 900f : 392f, 130f), panel);
+            DrawRect(new Rect(24f, 1080f - 132f, width - 48f, 114f), panel);
+            if (longing.TypedLetters > 0 || farhad.IsDead || goal.Reached) DrawRect(new Rect(0f, 210f, width, 220f), panel);
+
             var bar = new Rect(40f, 40f, 360f, 22f);
             DrawBar(bar, farhad.Stamina / farhad.MaxStamina,
                 farhad.OutOfBreath ? new Color(0.85f, 0.3f, 0.25f) : new Color(0.95f, 0.78f, 0.45f));
