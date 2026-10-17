@@ -15,8 +15,9 @@
 param(
     [string]$Target = "Assets/Art/Characters/Farhad",
     [int]$IdleFrame = 4,
-    # Crop box on the 3000x2000 canvas: holds Farhad and his full pickaxe swing in every frame.
-    [int]$CropX = 880, [int]$CropY = 0, [int]$CropW = 1200, [int]$CropH = 1670
+    # Crop box on the 3000x2000 canvas: holds Farhad and his full pickaxe swing in every frame, with
+    # room around him for his glow (see FarhadHalo).
+    [int]$CropX = 830, [int]$CropY = 0, [int]$CropW = 1300, [int]$CropH = 1720
 )
 
 # Folder in ArtSource, the artist's file prefix, and the name used in the game.

@@ -1,17 +1,19 @@
-# Turns the artist's rock tile into the game's three rock tiles.
+# Turns the artist's rock tiles into the game's rock tiles.
 #
-# Put the artist's export in ArtSource/Tiles/tile.png (the tile may sit anywhere on a larger
-# transparent canvas) and run:
+# Put the artist's exports in ArtSource/Tiles/ (each tile may sit anywhere on a larger transparent
+# canvas) and run:
 #     powershell -ExecutionPolicy Bypass -File Tools/process_tiles.ps1
 # then in Unity: Farhad > Build Dig Prototype Scene.
 #
-# From the one drawing it makes, at 256x256 px (a tile shows at 128 px on a 1080p screen):
-#   rock_solid.png - the stones on white paper. Hollow rock uses it too: it must look the same.
-#   rock_hard.png  - the stones darkened grey, so unbreakable rock can be told apart.
-#   back_wall.png  - a dark version, seen where rock has been dug out.
+# The stones are drawn looser the more hollow the rock is. Each drawing is laid on white paper and
+# written at 256x256 px (a tile shows at 128 px on a 1080p screen):
+#   tile-light.png  -> rock_hollow.png - big loose stones: hollow rock, breaks in one strike
+#   tile-medium.png -> rock_solid.png  - solid rock, takes several strikes
+#   tile-heavy.png  -> rock_hard.png   - small packed stones: hard rock, can't be broken
+#   tile-heavy.png  -> back_wall.png   - a dark version, seen where rock has been dug out
 
 param(
-    [string]$Source = "ArtSource/Tiles/tile.png",
+    [string]$Source = "ArtSource/Tiles",
     [string]$Target = "Assets/Art/Tiles",
     [int]$Size = 256
 )
@@ -21,21 +23,22 @@ $root = Split-Path $PSScriptRoot -Parent
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing -Path (Join-Path $PSScriptRoot "TileFix.cs")
 
-$in = Join-Path $root $Source
 $outDir = Join-Path $root $Target
 New-Item -ItemType Directory -Force $outDir | Out-Null
 
-$tile = [TileFix]::FindTile($in)
-Write-Output ("tile found at x {0} y {1}, {2}x{3} px" -f $tile.X, $tile.Y, $tile.Width, $tile.Height)
-
 $rgb = { param($r, $g, $b) [System.Drawing.Color]::FromArgb($r, $g, $b) }
-$variants = @(
-    @{ Name = "rock_solid"; Paper = (& $rgb 255 255 255); Ink = (& $rgb 0 0 0) },
-    @{ Name = "rock_hard";  Paper = (& $rgb 120 122 130); Ink = (& $rgb 15 15 20) },
-    @{ Name = "back_wall";  Paper = (& $rgb 48 46 46);    Ink = (& $rgb 22 20 20) }
+$white = & $rgb 255 255 255
+$black = & $rgb 0 0 0
+$tiles = @(
+    @{ From = "tile-light";  Name = "rock_hollow"; Paper = $white;             Ink = $black },
+    @{ From = "tile-medium"; Name = "rock_solid";  Paper = $white;             Ink = $black },
+    @{ From = "tile-heavy";  Name = "rock_hard";   Paper = $white;             Ink = $black },
+    @{ From = "tile-heavy";  Name = "back_wall";   Paper = (& $rgb 48 46 46);  Ink = (& $rgb 22 20 20) }
 )
-foreach ($v in $variants) {
-    $out = Join-Path $outDir "$($v.Name).png"
-    [TileFix]::Make($in, $tile, $out, $Size, $v.Paper, $v.Ink)
-    Write-Output "-> $Target/$($v.Name).png"
+foreach ($t in $tiles) {
+    $in = Join-Path $root "$Source/$($t.From).png"
+    $box = [TileFix]::FindTile($in)
+    $out = Join-Path $outDir "$($t.Name).png"
+    [TileFix]::Make($in, $box, $out, $Size, $t.Paper, $t.Ink)
+    Write-Output ("{0}.png ({1}x{2} px at x {3} y {4}) -> {5}/{6}.png" -f $t.From, $box.Width, $box.Height, $box.X, $box.Y, $Target, $t.Name)
 }

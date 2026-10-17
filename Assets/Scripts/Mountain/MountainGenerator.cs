@@ -6,7 +6,7 @@ using UnityEngine.Tilemaps;
 namespace Farhad
 {
     // Writes a mountain into the tilemaps: one hollow vein that runs all the way through it, hollow
-    // dead-ends that lead nowhere, hard rock, and hollow pockets. The mountain's shape either comes
+    // dead-ends that lead nowhere, and hollow pockets, in solid rock. The mountain's shape either comes
     // from the level's background art (see MountainArtLayout) or is made up: plains on both sides
     // of a cliff-faced block.
     public class MountainGenerator : MonoBehaviour
@@ -15,7 +15,6 @@ namespace Farhad
         public Tilemap backWallMap;
         public TileBase solidTile;
         public TileBase hollowTile;
-        public TileBase hardTile;
         public TileBase backWallTile;
 
         [Header("World (cells)")]
@@ -27,7 +26,6 @@ namespace Farhad
 
         [Header("Generation")]
         public int seed = 1405;
-        [Range(0f, 1f)] public float hardRockThreshold = 0.7f;
         [Range(0f, 1f)] public float hollowPocketThreshold = 0.8f;
         [Min(1)] public int veinWaypoints = 4;
         public int deadEndVeins = 10;
@@ -40,7 +38,7 @@ namespace Farhad
         RockType[,] cells;
         int[] tops; // per column: the first row above the highest rock
 
-        // The made-up mountain: a cliff-faced block with a hard crust on top, so it can't be climbed over.
+        // The made-up mountain: a cliff-faced block with a solid crust on top, so it can't be dug from above.
         [ContextMenu("Generate")]
         public void Generate()
         {
@@ -95,26 +93,15 @@ namespace Farhad
             {
                 if (!shape[x, y]) continue;
                 tops[x] = y + 1;
-                bool worldEdge = wallWorldEdges && (x == 0 || x == width - 1);
-                cells[x, y] = worldEdge || y < 2 ? RockType.Hard : RockType.Solid;
+                cells[x, y] = RockType.Solid;
             }
 
+            // Hollow pockets, kept off the floor and out of the solid crust on the mountain's top.
             for (int x = entrance.x; x <= exit.x; x++)
-            {
-                // A hard crust on the mountain (not on the plains) where it must not be dug from above.
-                if (tops[x] > groundLevel + 1)
-                    for (int y = Math.Max(2, tops[x] - crust); y < tops[x]; y++)
-                        if (cells[x, y] != RockType.Empty) cells[x, y] = RockType.Hard;
-
-                for (int y = 2; y < tops[x] - Math.Max(crust, 1); y++)
-                {
-                    if (cells[x, y] != RockType.Solid) continue;
-                    if (Mathf.PerlinNoise(ox + 50f + x * 0.11f, oy + 50f + y * 0.11f) > hardRockThreshold)
-                        cells[x, y] = RockType.Hard;
-                    else if (Mathf.PerlinNoise(ox + 200f + x * 0.2f, oy + 200f + y * 0.2f) > hollowPocketThreshold)
-                        cells[x, y] = RockType.Hollow;
-                }
-            }
+            for (int y = 2; y < tops[x] - Math.Max(crust, 1); y++)
+                if (cells[x, y] == RockType.Solid &&
+                    Mathf.PerlinNoise(ox + 200f + x * 0.2f, oy + 200f + y * 0.2f) > hollowPocketThreshold)
+                    cells[x, y] = RockType.Hollow;
 
             var vein = CarveMainVein(rng, entrance, exit, veinRoof);
             for (int i = 0; i < deadEndVeins; i++) CarveDeadEnd(rng, vein[rng.Next(vein.Count)], entrance.x, exit.x);
@@ -212,7 +199,7 @@ namespace Farhad
                 foreach (int x in new[] { 0, width - 1 })
                 {
                     rockPositions.Add(new Vector3Int(x, y, 0));
-                    rockTiles.Add(hardTile);
+                    rockTiles.Add(solidTile);
                 }
 
             rockMap.ClearAllTiles();
@@ -225,12 +212,7 @@ namespace Farhad
 #endif
         }
 
-        TileBase TileFor(RockType rock) => rock switch
-        {
-            RockType.Hollow => hollowTile,
-            RockType.Hard => hardTile,
-            _ => solidTile,
-        };
+        TileBase TileFor(RockType rock) => rock == RockType.Hollow ? hollowTile : solidTile;
 
         static TileBase[] Fill(TileBase tile, int count)
         {

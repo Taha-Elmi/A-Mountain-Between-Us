@@ -8,10 +8,11 @@ namespace Farhad.EditorTools
     // Imports Farhad's character frames (made by Tools/process_farhad_frames.ps1) and builds his
     // animation clips and Animator Controller from them.
     //
-    // Frame spec: every animation is cropped to the same 1200x1670 px box of the artist's canvas
-    // (x 880, y 0); Farhad is ~1475 px tall, imported at 820 px per unit so he stands ~1.8 units
-    // (tiles) tall. The pivot sits between his feet on the body's center line (canvas x 1458,
-    // y 1645), so he doesn't shift between animations and flipping him keeps him in place.
+    // Frame spec: every animation is cropped to the same 1300x1720 px box of the artist's canvas
+    // (x 830, y 0), leaving room around him for his glow; Farhad is ~1475 px tall, imported at
+    // 820 px per unit so he stands ~1.8 units (tiles) tall. The pivot sits between his feet on the
+    // body's center line (canvas x 1458, y 1645), so he doesn't shift between animations and
+    // flipping him keeps him in place.
     public static class FarhadArtSetup
     {
         public const string ArtDir = "Assets/Art/Characters/Farhad";
@@ -21,7 +22,7 @@ namespace Farhad.EditorTools
         public const string StrikeParameter = "Strike";
 
         const float PixelsPerUnit = 820f;
-        static readonly Vector2 FeetPivot = new((1458f - 880f) / 1200f, (1670f - 1645f) / 1670f);
+        static readonly Vector2 FeetPivot = new((1458f - 830f) / 1300f, (1720f - 1645f) / 1720f);
         const float WalkFramesPerSecond = 12f;
 
         // The swing: the pickaxe meets the rock on its last drawn frame, which is then held a moment.
@@ -116,7 +117,7 @@ namespace Farhad.EditorTools
             importer.ReadTextureSettings(settings);
             settings.spriteAlignment = (int)SpriteAlignment.Custom;
             settings.spritePivot = FeetPivot;
-            settings.spriteMeshType = SpriteMeshType.Tight;
+            settings.spriteMeshType = SpriteMeshType.FullRect; // a tight mesh would clip his glow
             importer.SetTextureSettings(settings);
             importer.SaveAndReimport();
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);

@@ -39,16 +39,15 @@ namespace Farhad.EditorTools
 
             // The artist's tiles (made by Tools/process_tiles.ps1) when they exist, else placeholders.
             var solidSprite = TileArt("rock_solid") ?? MakeSprite("rock_solid", RockTexture(new Color(0.66f, 0.53f, 0.42f), new Color(0.44f, 0.33f, 0.27f), 11, true));
-            var hardSprite = TileArt("rock_hard") ?? MakeSprite("rock_hard", RockTexture(new Color(0.38f, 0.4f, 0.47f), new Color(0.2f, 0.21f, 0.27f), 23, true));
             var wallSprite = TileArt("back_wall") ?? MakeSprite("back_wall", RockTexture(new Color(0.24f, 0.19f, 0.17f), new Color(0.16f, 0.12f, 0.11f), 37, false));
             var markerSprite = MakeSprite("target_marker", MarkerTexture());
             var farhadSprite = MakeSprite("farhad", FarhadTexture());
             var beaconSprite = MakeSprite("goal_beacon", BeaconTexture());
-            var carvingSprite = MakeSprite("shirin_carving", CarvingTexture());
 
             var solidTile = MakeTile("RockSolid", solidSprite, Tile.ColliderType.Grid);
             var hollowTile = MakeTile("RockHollow", solidSprite, Tile.ColliderType.Grid); // same look as solid on purpose
-            var hardTile = MakeTile("RockHard", hardSprite, Tile.ColliderType.Grid);
+            // Drawn over hollow rock while it is revealed: the artist's loose stones, if they exist.
+            var revealTile = MakeTile("RockHollowRevealed", TileArt("rock_hollow") ?? solidSprite, Tile.ColliderType.None);
             var wallTile = MakeTile("BackWall", wallSprite, Tile.ColliderType.None);
             var frictionless = MakeFrictionless();
 
@@ -63,13 +62,13 @@ namespace Farhad.EditorTools
             var backWall = MakeTilemap(grid.transform, "Back Wall", -10);
             var rock = MakeTilemap(grid.transform, "Rock", 0);
             rock.gameObject.AddComponent<TilemapCollider2D>();
+            var reveal = MakeTilemap(grid.transform, "Revealed Hollow Rock", 1);
 
             var generator = grid.AddComponent<MountainGenerator>();
             generator.rockMap = rock;
             generator.backWallMap = backWall;
             generator.solidTile = solidTile;
             generator.hollowTile = hollowTile;
-            generator.hardTile = hardTile;
             generator.backWallTile = wallTile;
             if (MountainArtLayout.HasArt)
             {
@@ -77,7 +76,7 @@ namespace Farhad.EditorTools
                 generator.Generate(layout.Shape, layout.BackWallShape, layout.Entrance, layout.Exit, layout.SpawnX);
                 layout.PlaceLayers(new GameObject("Background").transform);
                 // Rock is drawn only inside the artist's outline of the mountain.
-                foreach (var map in new[] { rock, backWall })
+                foreach (var map in new[] { rock, reveal, backWall })
                     map.GetComponent<TilemapRenderer>().maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
             }
             else generator.Generate();
@@ -87,7 +86,8 @@ namespace Farhad.EditorTools
             mountain.rockMap = rock;
             mountain.solidTile = solidTile;
             mountain.hollowTile = hollowTile;
-            mountain.hardTile = hardTile;
+            mountain.revealMap = reveal;
+            mountain.revealTile = revealTile;
 
             var rockfall = grid.AddComponent<Rockfall>();
             rockfall.mountain = mountain;
@@ -154,10 +154,20 @@ namespace Farhad.EditorTools
             }
             farhad.targetMarker = marker;
 
-            var longing = farhadObject.AddComponent<Longing>();
-            longing.mountain = mountain;
-            longing.backWallMap = backWall;
-            longing.carvingSprite = carvingSprite;
+            var call = farhadObject.AddComponent<ShirinCall>();
+            call.mountain = mountain;
+
+            // His glow: a copy of his sprite just behind him, drawn by the halo shader.
+            if (animator != null)
+            {
+                var haloRenderer = new GameObject("Halo").AddComponent<SpriteRenderer>();
+                haloRenderer.transform.SetParent(body.transform, false);
+                haloRenderer.sortingOrder = body.sortingOrder - 1;
+                haloRenderer.sharedMaterial = HaloMaterial();
+                var halo = haloRenderer.gameObject.AddComponent<FarhadHalo>();
+                halo.body = body;
+                halo.call = call;
+            }
 
             // Camera
             var cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
@@ -178,7 +188,7 @@ namespace Farhad.EditorTools
 
             var hud = new GameObject("Prototype HUD").AddComponent<PrototypeHud>();
             hud.farhad = farhad;
-            hud.longing = longing;
+            hud.call = call;
             hud.mountain = mountain;
             hud.goal = goal;
 
@@ -188,6 +198,16 @@ namespace Farhad.EditorTools
             EditorBuildSettings.scenes = buildScenes.ToArray();
             AssetDatabase.SaveAssets();
             Debug.Log($"Dig prototype scene built at {ScenePath}");
+        }
+
+        static Material HaloMaterial()
+        {
+            string path = FarhadArtSetup.ArtDir + "/FarhadHalo.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material != null) return material;
+            material = new Material(Shader.Find("Farhad/SpriteHalo"));
+            AssetDatabase.CreateAsset(material, path);
+            return material;
         }
 
         // Invisible walls on both sides of the level and a ceiling over it.
@@ -367,32 +387,6 @@ namespace Farhad.EditorTools
                 float across = 1f - Mathf.Abs(x - w / 2f) / (w / 2f);
                 float up = 1f - y / (float)h;
                 tex.SetPixel(x, y, new Color(1f, 0.85f, 0.5f, across * across * up * 0.8f));
-            }
-            tex.Apply();
-            return tex;
-        }
-
-        // 256x256 px (2x2 units): a pale, scratched outline of a woman's face in profile, facing left.
-        static Texture2D CarvingTexture()
-        {
-            const int size = 256;
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            var line = new Color(0.95f, 0.86f, 0.72f, 1f);
-            for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-            {
-                float fx = (x - 128f) / 60f, fy = (y - 132f) / 80f;
-                float face = Mathf.Abs(fx * fx + fy * fy - 1f);                     // oval of the face
-                float hx = (x - 146f) / 78f, hy = (y - 150f) / 92f;
-                float hair = Mathf.Abs(hx * hx + hy * hy - 1f);                     // hair falling behind
-                bool hairSide = x > 128 && y > 70;
-                bool eye = Mathf.Abs(x - 100) < 9 && Mathf.Abs(y - 150) < 3;
-                bool brow = Mathf.Abs(x - 100) < 14 && Mathf.Abs(y - 165 - (x - 100) * 0.15f) < 2;
-                bool lips = Mathf.Abs(x - 92) < 8 && Mathf.Abs(y - 98) < 2;
-                bool neck = (Mathf.Abs(x - 110) < 2 || Mathf.Abs(x - 146) < 2) && y < 58 && y > 10;
-
-                bool ink = face < 0.06f || (hairSide && hair < 0.05f) || eye || brow || lips || neck;
-                tex.SetPixel(x, y, ink ? line : Color.clear);
             }
             tex.Apply();
             return tex;

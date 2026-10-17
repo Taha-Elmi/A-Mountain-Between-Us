@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -6,8 +5,8 @@ using UnityEngine.SceneManagement;
 
 namespace Farhad
 {
-    // Walking, jumping, and working the rock: left mouse strikes, right mouse knocks and listens.
-    // Striking rock that isn't hollow strains the mountain; strain it too far and it falls on him.
+    // Walking, jumping, and working the rock with left mouse. Hollow rock breaks; solid rock doesn't,
+    // and striking it strains the mountain until it falls on him.
     [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D))]
     public class FarhadController : MonoBehaviour
     {
@@ -28,35 +27,19 @@ namespace Farhad
         [Header("Working the rock")]
         public float strikeImpactTime = 0.42f;
         public float strikeDuration = 0.67f;
-        public float knockRadius = 2.5f;
-
-        // Stamina never refills on its own: only thinking of Shirin restores it (see Longing).
-        [Header("Stamina")]
-        public float maxStamina = 100f;
-        public float solidStrikeCost = 8f;
-        public float hollowStrikeCost = 3f;
-        public float hardStrikeCost = 8f;
-        public float knockCost = 4f;
 
         [Header("Mountain strain")]
-        [Tooltip("Strikes on non-hollow rock in quick succession before the mountain collapses.")]
-        public float strainLimit = 4f;
-        [Tooltip("Strain shed per second once Farhad stops striking non-hollow rock.")]
+        [Tooltip("Strikes on solid rock (in quick succession) that bring the rockfall. 1: the first one does. " +
+                 "Higher: the earlier ones only warn, with rumbling, pebbles and shaking.")]
+        [Min(1f)] public float strainLimit = 1f;
+        [Tooltip("Strain shed per second once Farhad stops striking solid rock.")]
         public float strainRecovery = 0.35f;
         public float strainRecoveryDelay = 1.5f;
 
-        public float Stamina { get; private set; }
-        public float MaxStamina => maxStamina;
-        public bool OutOfBreath => Time.time - lastFailedTime < 1.2f;
         public float Strain { get; private set; }
         public bool IsDead { get; private set; }
-        // While dreaming Farhad stands frozen and ignores input.
-        public bool IsDreaming { get; set; }
-        public bool IsStill => moveInput == 0f && rb.linearVelocity.sqrMagnitude < 0.01f;
         public bool IsSwinging => Time.time < swingEnd;
-
-        // Raised after every strike that landed (stamina was spent), with the rock that was struck.
-        public event Action<RockType> Struck;
+        public Bounds BodyBounds => col.bounds;
 
         Rigidbody2D rb;
         CapsuleCollider2D col;
@@ -69,11 +52,8 @@ namespace Farhad
         float swingImpact;
         bool swingLanded = true;
         Vector3Int swingCell;
-        float lastFailedTime = float.NegativeInfinity;
         float lastStrainTime;
         float deathTime;
-
-        public void RestoreStamina(float amount) => Stamina = Mathf.Min(maxStamina, Stamina + amount);
 
         void Awake()
         {
@@ -82,7 +62,6 @@ namespace Farhad
             cam = Camera.main;
             groundFilter = new ContactFilter2D { useTriggers = false };
             groundFilter.SetLayerMask(groundMask);
-            Stamina = maxStamina;
         }
 
         void Update()
@@ -99,12 +78,6 @@ namespace Farhad
             }
 
             moveInput = 0f;
-            if (IsDreaming)
-            {
-                targetMarker.enabled = false;
-                return;
-            }
-
             if (!swingLanded && Time.time >= swingImpact) LandSwing();
             if (IsSwinging)
             {
@@ -125,14 +98,11 @@ namespace Farhad
             var rock = mountain.GetRock(cell);
             bool inReach = IsNextTo(cell);
 
-            body.flipX = aim.x < transform.position.x;
+            // He faces the way he walks, and keeps facing that way when he stops.
+            if (moveInput != 0f) body.flipX = moveInput < 0f;
             UpdateMarker(cellCenter, rock, inReach);
 
-            if (inReach && rock != RockType.Empty)
-            {
-                if (mouse.leftButton.isPressed) StartSwing(cell, rock);
-                else if (mouse.rightButton.wasPressedThisFrame) KnockAt(cell, rock);
-            }
+            if (inReach && rock != RockType.Empty && mouse.leftButton.isPressed) StartSwing(cell);
 
             UpdateStrain();
         }
@@ -157,21 +127,16 @@ namespace Farhad
 
         static readonly int StrikeId = Animator.StringToHash("Strike");
 
-        void StartSwing(Vector3Int cell, RockType rock)
+        void StartSwing(Vector3Int cell)
         {
-            float cost = rock switch
-            {
-                RockType.Hollow => hollowStrikeCost,
-                RockType.Hard => hardStrikeCost,
-                _ => solidStrikeCost,
-            };
-            if (!TrySpend(cost)) return;
-
             swingCell = cell;
             swingImpact = Time.time + strikeImpactTime;
             swingEnd = Time.time + strikeDuration;
             swingLanded = false;
             moveInput = 0f;
+            // Turn toward rock beside him; rock above or below keeps his current facing.
+            int side = SideOf(cell);
+            if (side != 0) body.flipX = side < 0;
             if (animator != null) animator.SetTrigger(StrikeId);
         }
 
@@ -183,8 +148,7 @@ namespace Farhad
 
             bool broke = mountain.Strike(swingCell);
             sounds.PlayStrike(rock, broke);
-            Struck?.Invoke(rock);
-            if (rock != RockType.Hollow) AddStrain();
+            if (rock == RockType.Solid) AddStrain();
         }
 
         void AddStrain()
@@ -210,24 +174,6 @@ namespace Farhad
             rb.simulated = false;
             targetMarker.enabled = false;
             rockfall.Collapse(this);
-        }
-
-        void KnockAt(Vector3Int cell, RockType rock)
-        {
-            if (!TrySpend(knockCost)) return;
-            int answered = mountain.Knock(cell, knockRadius);
-            sounds.PlayKnock(answered > 0 || rock == RockType.Hollow);
-        }
-
-        bool TrySpend(float cost)
-        {
-            if (Stamina < cost)
-            {
-                lastFailedTime = Time.time;
-                return false;
-            }
-            Stamina -= cost;
-            return true;
         }
 
         static readonly int WalkingId = Animator.StringToHash("Walking");
@@ -262,13 +208,22 @@ namespace Farhad
                 || (inBodyColumns && (cell.y == min.y - 1 || cell.y == max.y + 1));
         }
 
+        // -1 if the cell lies left of his body's columns, +1 if right, 0 if within them.
+        int SideOf(Vector3Int cell)
+        {
+            const float inset = 0.05f;
+            var bounds = col.bounds;
+            int minX = mountain.rockMap.WorldToCell(new Vector3(bounds.min.x + inset, bounds.center.y)).x;
+            int maxX = mountain.rockMap.WorldToCell(new Vector3(bounds.max.x - inset, bounds.center.y)).x;
+            return cell.x < minX ? -1 : cell.x > maxX ? 1 : 0;
+        }
+
         void UpdateMarker(Vector2 cellCenter, RockType rock, bool inReach)
         {
-            targetMarker.enabled = rock != RockType.Empty;
+            // Only rock he can actually strike is marked.
+            targetMarker.enabled = inReach && rock != RockType.Empty;
             targetMarker.transform.position = cellCenter;
-            targetMarker.color = !inReach ? new Color(1f, 0.35f, 0.3f, 0.35f)
-                : rock == RockType.Hard ? new Color(0.7f, 0.75f, 0.85f, 0.6f)
-                : new Color(1f, 1f, 1f, 0.85f);
+            targetMarker.color = new Color(1f, 1f, 1f, 0.85f);
         }
     }
 }

@@ -5,7 +5,8 @@ using UnityEngine.Tilemaps;
 
 namespace Farhad
 {
-    public enum RockType : byte { Empty, Solid, Hollow, Hard }
+    // Hollow rock breaks; solid rock never does, and striking it brings the mountain down.
+    public enum RockType : byte { Empty, Solid, Hollow }
 
     // Runtime state of the diggable mountain. The rock type of each cell is the tile asset painted
     // into the rock tilemap, so levels can be generated or painted by hand with a Tile Palette.
@@ -13,78 +14,98 @@ namespace Farhad
     {
         public Tilemap rockMap;
         public TileBase solidTile;
-        public TileBase hollowTile; // uses the same sprite as solidTile: hollow rock must not be visible
-        public TileBase hardTile;
+        public TileBase hollowTile; // looks exactly like solid rock: hollowness only shows when revealed
 
         [Header("Digging")]
-        [Min(1)] public int solidHits = 5;
         [Min(1)] public int hollowHits = 1;
         public Color damagedTint = new(0.45f, 0.38f, 0.34f);
 
-        [Header("Knocking")]
-        public Color echoTint = new(1f, 0.8f, 0.45f);
-        public float echoDuration = 2.5f;
+        // Revealed hollow rock is drawn over with the artist's loose-stone tile, tinted with the gold
+        // of Farhad's glow, on a tilemap just above the rock.
+        [Header("Revealing hollow rock")]
+        public Tilemap revealMap;
+        public TileBase revealTile;
+        public Color revealTint = new(1f, 0.82f, 0.5f);
+        [Tooltip("Seconds the reveal takes to fade in, and again to fade out.")]
+        [Min(0.01f)] public float revealFade = 0.6f;
+
+        struct Reveal
+        {
+            public float start, end;
+        }
 
         readonly Dictionary<Vector3Int, int> damage = new();
-        readonly Dictionary<Vector3Int, float> echoEnds = new();
-        readonly List<Vector3Int> echoCells = new();
+        readonly Dictionary<Vector3Int, Reveal> reveals = new();
+        readonly List<Vector3Int> revealCells = new();
         bool debugReveal;
 
         public bool DebugReveal => debugReveal;
 
-        // Chance that a knock makes nearby solid rock ring as if hollow. Set by Farhad's madness.
-        public float FalseEchoChance { get; set; }
+        void Awake()
+        {
+            if (revealMap == null)
+                Debug.LogError("MountainGrid has no reveal tilemap, so calling Shirin can't show hollow rock. " +
+                               "The scene is out of date: rebuild it with Farhad > Build Dig Prototype Scene.", this);
+        }
 
         public RockType GetRock(Vector3Int cell)
         {
             var tile = rockMap.GetTile(cell);
             if (tile == null) return RockType.Empty;
-            if (tile == hollowTile) return RockType.Hollow;
-            if (tile == hardTile) return RockType.Hard;
-            return RockType.Solid;
+            return tile == hollowTile ? RockType.Hollow : RockType.Solid;
         }
 
-        public int HitsFor(RockType rock) => rock == RockType.Hollow ? hollowHits : solidHits;
-
-        // Returns true when the strike broke the rock.
+        // Returns true when the strike broke the rock. Solid rock never breaks.
         public bool Strike(Vector3Int cell)
         {
-            var rock = GetRock(cell);
-            if (rock is RockType.Empty or RockType.Hard) return false;
+            if (GetRock(cell) != RockType.Hollow) return false;
 
             damage.TryGetValue(cell, out int hits);
             hits++;
-            if (hits >= HitsFor(rock))
+            if (hits >= hollowHits)
             {
                 damage.Remove(cell);
-                echoEnds.Remove(cell);
                 rockMap.SetTile(cell, null);
+                if (!debugReveal) HideReveal(cell);
+                reveals.Remove(cell);
                 return true;
             }
 
             damage[cell] = hits;
-            RefreshColor(cell);
+            rockMap.SetTileFlags(cell, TileFlags.None);
+            rockMap.SetColor(cell, Color.Lerp(Color.white, damagedTint, hits / (float)hollowHits));
             return false;
         }
 
-        // Makes hollow rock around the cell ring back for a moment. Returns how many cells answered,
-        // including solid rock that only seemed to answer (see FalseEchoChance).
-        public int Knock(Vector3Int cell, float radius)
+        // Shows the hollow rock within radius tiles of the area (Farhad's body) for duration seconds.
+        // The reveal spreads outward at spread tiles per second. Returns how many hollow cells showed.
+        public int RevealAround(Bounds area, float radius, float duration, float spread)
         {
-            int answered = 0;
-            int r = Mathf.CeilToInt(radius);
-            for (int x = -r; x <= r; x++)
-            for (int y = -r; y <= r; y++)
+            int found = 0;
+            var min = rockMap.WorldToCell(area.min - Vector3.one * radius);
+            var max = rockMap.WorldToCell(area.max + Vector3.one * radius);
+            for (int x = min.x; x <= max.x; x++)
+            for (int y = min.y; y <= max.y; y++)
             {
-                if (x * x + y * y > radius * radius) continue;
-                var c = cell + new Vector3Int(x, y, 0);
-                var rock = GetRock(c);
-                bool lies = rock == RockType.Solid && Random.value < FalseEchoChance;
-                if (rock != RockType.Hollow && !lies) continue;
-                echoEnds[c] = Time.time + echoDuration;
-                answered++;
+                var cell = new Vector3Int(x, y, 0);
+                if (GetRock(cell) != RockType.Hollow) continue;
+                var center = rockMap.GetCellCenterWorld(cell);
+                center.z = area.center.z;
+                float distance = Mathf.Sqrt(area.SqrDistance(center));
+                if (distance > radius) continue;
+
+                float start = Time.time + (spread > 0f ? distance / spread : 0f);
+                var reveal = new Reveal { start = start, end = start + duration };
+                if (reveals.TryGetValue(cell, out var old) && Time.time < old.end)
+                {
+                    // Already showing: keep it showing, without fading out and back in.
+                    reveal.start = Mathf.Min(old.start, start);
+                    reveal.end = Mathf.Max(old.end, reveal.end);
+                }
+                reveals[cell] = reveal;
+                found++;
             }
-            return answered;
+            return found;
         }
 
         void Update()
@@ -92,40 +113,54 @@ namespace Farhad
             var kb = Keyboard.current;
             if (kb != null && kb.f1Key.wasPressedThisFrame) SetDebugReveal(!debugReveal);
 
-            if (echoEnds.Count == 0) return;
-            echoCells.Clear();
-            echoCells.AddRange(echoEnds.Keys);
-            foreach (var c in echoCells)
+            if (reveals.Count == 0) return;
+            revealCells.Clear();
+            revealCells.AddRange(reveals.Keys);
+            float now = Time.time;
+            foreach (var cell in revealCells)
             {
-                if (Time.time >= echoEnds[c]) echoEnds.Remove(c);
-                RefreshColor(c);
+                var r = reveals[cell];
+                if (now >= r.end || GetRock(cell) != RockType.Hollow)
+                {
+                    reveals.Remove(cell);
+                    if (!debugReveal) HideReveal(cell);
+                    continue;
+                }
+                if (debugReveal) continue;
+
+                float fadeIn = Mathf.InverseLerp(r.start, r.start + revealFade, now);
+                float fadeOut = Mathf.InverseLerp(r.end, r.end - revealFade, now);
+                ShowReveal(cell, Mathf.SmoothStep(0f, 1f, Mathf.Min(fadeIn, fadeOut)));
             }
         }
 
         void SetDebugReveal(bool on)
         {
             debugReveal = on;
-            foreach (var c in rockMap.cellBounds.allPositionsWithin)
-                if (GetRock(c) == RockType.Hollow) RefreshColor(c);
+            foreach (var cell in rockMap.cellBounds.allPositionsWithin)
+            {
+                if (GetRock(cell) != RockType.Hollow) continue;
+                if (on) ShowReveal(cell, 1f);
+                else HideReveal(cell);
+            }
         }
 
-        void RefreshColor(Vector3Int cell)
+        void ShowReveal(Vector3Int cell, float alpha)
         {
-            var rock = GetRock(cell);
-            if (rock == RockType.Empty) return;
+            if (revealMap == null) return;
+            if (revealMap.GetTile(cell) == null)
+            {
+                revealMap.SetTile(cell, revealTile);
+                revealMap.SetTileFlags(cell, TileFlags.None);
+            }
+            var color = revealTint;
+            color.a = alpha;
+            revealMap.SetColor(cell, color);
+        }
 
-            var color = Color.white;
-            if (damage.TryGetValue(cell, out int hits))
-                color = Color.Lerp(Color.white, damagedTint, hits / (float)HitsFor(rock));
-
-            float glow = 0f;
-            if (echoEnds.TryGetValue(cell, out float end))
-                glow = Mathf.SmoothStep(0f, 1f, (end - Time.time) / echoDuration);
-            if (debugReveal && rock == RockType.Hollow)
-                glow = Mathf.Max(glow, 0.6f);
-
-            rockMap.SetTileFlags(cell, TileFlags.None);
-            rockMap.SetColor(cell, Color.Lerp(color, echoTint, glow));
+        void HideReveal(Vector3Int cell)
+        {
+            if (revealMap != null) revealMap.SetTile(cell, null);
         }
     }
 }

@@ -11,7 +11,7 @@ namespace Farhad
         const int SampleRate = 44100;
 
         AudioSource source;
-        AudioClip solidHit, hollowHit, hardHit, rockBreak, knockSolid, knockHollow, rumble, rockfall, thought;
+        AudioClip solidHit, hollowHit, rockBreak, rumble, rockfall, call;
         readonly System.Random noise = new(7);
 
         void Awake()
@@ -25,17 +25,8 @@ namespace Farhad
             // Hollow: a resonant "tok" that rings and echoes back.
             hollowHit = Make("HollowHit", 0.7f, t => Ring(t) + Ring(t - 0.13f) * 0.35f + Noise() * Decay(t, 60f) * 0.3f);
 
-            // Hard: a bright clang that does nothing.
-            hardHit = Make("HardHit", 0.4f, t =>
-                (Sine(1180f, t) * 0.5f + Sine(1730f, t) * 0.3f) * Decay(t, 12f) + Noise() * Decay(t, 80f) * 0.3f);
-
             rockBreak = Make("RockBreak", 0.45f, t =>
                 Noise() * Decay(t, 9f) * 0.6f + Sine(60f, t) * Decay(t, 7f) * 0.6f);
-
-            knockSolid = Make("KnockSolid", 0.15f, t => Sine(140f, t) * Decay(t, 35f) * 0.6f);
-
-            knockHollow = Make("KnockHollow", 1.1f, t =>
-                (Ring(t) + Ring(t - 0.18f) * 0.45f + Ring(t - 0.36f) * 0.2f) * 0.8f);
 
             // The mountain groaning: deep noise that swells and fades.
             var groan = Brown();
@@ -47,32 +38,24 @@ namespace Farhad
                 roar() * Mathf.Min(1f, t * 20f) * Decay(t, 1.2f) * 1.3f
                 + (noise.NextDouble() < 0.002 ? 1f : 0f) + Noise() * Decay(t, 3f) * 0.25f);
 
-            // Thinking of Shirin: a soft, warm swell.
-            thought = Make("Thought", 1.6f, t =>
+            // Calling Shirin: a soft, warm swell.
+            call = Make("Call", 1.6f, t =>
                 (Sine(392f, t) * 0.4f + Sine(587f, t) * 0.25f + Sine(784f, t) * 0.1f)
                 * Mathf.Min(1f, t * 4f) * Decay(t, 2.2f));
         }
 
         public void PlayStrike(RockType rock, bool broke)
         {
-            var clip = rock switch
-            {
-                RockType.Hollow => hollowHit,
-                RockType.Hard => hardHit,
-                _ => solidHit,
-            };
-            Play(clip, 0.9f);
+            Play(rock == RockType.Hollow ? hollowHit : solidHit, 0.9f);
             if (broke) Play(rockBreak, 0.6f);
         }
-
-        public void PlayKnock(bool hollowAnswered) => Play(hollowAnswered ? knockHollow : knockSolid, 0.7f);
 
         // severity: 0..1, how close the mountain is to collapsing.
         public void PlayRumble(float severity) => Play(rumble, 0.3f + 0.7f * severity);
 
         public void PlayRockfall() => Play(rockfall, 1f);
 
-        public void PlayThought() => Play(thought, 0.6f);
+        public void PlayCall() => Play(call, 0.6f);
 
         void Play(AudioClip clip, float volume)
         {
