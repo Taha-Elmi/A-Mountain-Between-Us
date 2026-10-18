@@ -10,14 +10,19 @@
 # and the result is written to Assets/Art/Characters/Farhad/<Animation>/farhad_<name>_NN.png.
 # The idle pose is a copy of one walk frame.
 #
+# Some frames were exported on a larger canvas, grown evenly on every side around the same drawing
+# (Action7-9 are 3496x2362): those are shifted back onto the 3000x2000 layout before cropping.
+#
 # If you change the crop box, update FeetPivot in Assets/Editor/FarhadArtSetup.cs to match.
 
 param(
     [string]$Target = "Assets/Art/Characters/Farhad",
     [int]$IdleFrame = 4,
-    # Crop box on the 3000x2000 canvas: holds Farhad and his full pickaxe swing in every frame, with
-    # room around him for his glow (see FarhadHalo).
-    [int]$CropX = 830, [int]$CropY = 0, [int]$CropW = 1300, [int]$CropH = 1720
+    # Crop box on the 3000x2000 canvas: holds Farhad and his full pickaxe swing in every frame (the
+    # low forward strike of Action9 reaches furthest, to x ~2375), with room around him for his
+    # glow (see FarhadHalo).
+    [int]$CropX = 830, [int]$CropY = 0, [int]$CropW = 1600, [int]$CropH = 1720,
+    [int]$CanvasW = 3000, [int]$CanvasH = 2000
 )
 
 # Folder in ArtSource, the artist's file prefix, and the name used in the game.
@@ -41,7 +46,11 @@ foreach ($animation in $animations) {
     foreach ($frame in $frames) {
         $number = [int]($frame.BaseName -replace '\D', '')
         $out = Join-Path $outDir ("farhad_{0}_{1:00}.png" -f $animation.Name, $number)
-        [FrameFix]::Process($frame.FullName, $out, $CropX, $CropY, $CropW, $CropH)
+        $image = [System.Drawing.Image]::FromFile($frame.FullName)
+        $offsetX = [int][math]::Floor(($image.Width - $CanvasW) / 2)
+        $offsetY = [int][math]::Floor(($image.Height - $CanvasH) / 2)
+        $image.Dispose()
+        [FrameFix]::Process($frame.FullName, $out, $CropX + $offsetX, $CropY + $offsetY, $CropW, $CropH)
         Write-Output ("{0}/{1} -> {2}" -f $animation.Folder, $frame.Name, (Split-Path $out -Leaf))
     }
 }

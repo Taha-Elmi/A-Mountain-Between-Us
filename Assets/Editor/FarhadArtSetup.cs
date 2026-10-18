@@ -8,7 +8,7 @@ namespace Farhad.EditorTools
     // Imports Farhad's character frames (made by Tools/process_farhad_frames.ps1) and builds his
     // animation clips and Animator Controller from them.
     //
-    // Frame spec: every animation is cropped to the same 1300x1720 px box of the artist's canvas
+    // Frame spec: every animation is cropped to the same 1600x1720 px box of the artist's canvas
     // (x 830, y 0), leaving room around him for his glow; Farhad is ~1475 px tall, imported at
     // 820 px per unit so he stands ~1.8 units (tiles) tall. The pivot sits between his feet on the
     // body's center line (canvas x 1458, y 1645), so he doesn't shift between animations and
@@ -19,20 +19,34 @@ namespace Farhad.EditorTools
         const string AnimationDir = "Assets/Animation/Farhad";
         const string ControllerPath = AnimationDir + "/Farhad.controller";
         public const string WalkingParameter = "Walking";
-        public const string StrikeParameter = "Strike";
 
         const float PixelsPerUnit = 820f;
-        static readonly Vector2 FeetPivot = new((1458f - 830f) / 1300f, (1720f - 1645f) / 1720f);
+        static readonly Vector2 FeetPivot = new((1458f - 830f) / 1600f, (1720f - 1645f) / 1720f);
         const float WalkFramesPerSecond = 12f;
 
-        // The swing: the pickaxe meets the rock on its last drawn frame, which is then held a moment.
+        // A swing raises the pickaxe and brings it down only as far as the rock it is aimed at: the
+        // drawn frames run up to that direction's impact frame, which is held a moment, then play
+        // back (twice as fast) to where he started.
         const float StrikeFramesPerSecond = 12f;
-        const int StrikeImpactFrame = 6;
-        const int StrikeHoldFrames = 2;
-        public const float StrikeImpactTime = (StrikeImpactFrame - 1) / StrikeFramesPerSecond;
+        const int StrikeHoldFrames = 1;
+        static readonly (StrikeDirection direction, int impactFrame)[] Strikes =
+        {
+            (StrikeDirection.Up, 5),   // pickaxe raised over his head
+            (StrikeDirection.Side, 8), // swung out level in front of him
+            (StrikeDirection.Down, 9), // bent over, swung down by his feet
+        };
 
-        // Seconds from the start of a swing to when the next can begin (set on FarhadController).
-        public static float StrikeDuration { get; private set; }
+        // When the rock is hit, and when the next swing can begin (set on FarhadController).
+        public static StrikeTiming TimingOf(StrikeDirection direction)
+        {
+            int impactFrame = Strikes.First(strike => strike.direction == direction).impactFrame;
+            return new StrikeTiming
+            {
+                impactTime = (impactFrame - 1) / StrikeFramesPerSecond,
+                duration = (impactFrame + StrikeHoldFrames) / StrikeFramesPerSecond
+                           + (impactFrame - 1) / (StrikeFramesPerSecond * 2f),
+            };
+        }
 
         public static bool HasArt => AssetDatabase.LoadAssetAtPath<Texture2D>(ArtDir + "/farhad_idle.png") != null;
 
@@ -42,43 +56,64 @@ namespace Farhad.EditorTools
             var idle = ImportSprite(ArtDir + "/farhad_idle.png");
             var walk = ImportFrames("Walk", "farhad_walk_");
             var strike = ImportFrames("Strike", "farhad_strike_");
+            int framesNeeded = Strikes.Max(s => s.impactFrame);
+            if (strike.Length < framesNeeded)
+                throw new System.InvalidOperationException(
+                    $"Farhad's strike needs {framesNeeded} frames; found {strike.Length} in {ArtDir}/Strike");
 
             EnsureFolder(AnimationDir);
+            AssetDatabase.DeleteAsset(AnimationDir + "/Farhad_Strike.anim"); // the old one-way swing
             var idleClip = MakeClip("Farhad_Idle", new[] { idle }, 1f, loop: true);
             var walkClip = MakeClip("Farhad_Walk", walk, WalkFramesPerSecond, loop: true);
-            var strikeFrames = strike.Concat(Enumerable.Repeat(strike[^1], StrikeHoldFrames)).ToArray();
-            var strikeClip = MakeClip("Farhad_Strike", strikeFrames, StrikeFramesPerSecond, loop: false);
-            StrikeDuration = strikeFrames.Length / StrikeFramesPerSecond;
 
             AssetDatabase.DeleteAsset(ControllerPath);
             var controller = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
             controller.AddParameter(WalkingParameter, AnimatorControllerParameterType.Bool);
-            controller.AddParameter(StrikeParameter, AnimatorControllerParameterType.Trigger);
             var states = controller.layers[0].stateMachine;
             var idleState = states.AddState("Idle");
             idleState.motion = idleClip;
             var walkState = states.AddState("Walk");
             walkState.motion = walkClip;
-            var strikeState = states.AddState("Strike");
-            strikeState.motion = strikeClip;
             states.defaultState = idleState;
             AddInstantTransition(idleState, walkState, AnimatorConditionMode.If);
             AddInstantTransition(walkState, idleState, AnimatorConditionMode.IfNot);
 
-            // A swing can start from any state, and always plays to its end before he stands again.
-            var toStrike = states.AddAnyStateTransition(strikeState);
-            toStrike.hasExitTime = false;
-            toStrike.duration = 0f;
-            toStrike.AddCondition(AnimatorConditionMode.If, 0f, StrikeParameter);
-            var fromStrike = strikeState.AddTransition(idleState);
-            fromStrike.hasExitTime = true;
-            fromStrike.exitTime = 1f;
-            fromStrike.duration = 0f;
+            var summary = new System.Text.StringBuilder();
+            foreach (var (direction, impactFrame) in Strikes)
+            {
+                // A swing can start from any state, and always plays to its end before he stands again.
+                string name = FarhadController.StrikeParameter(direction);
+                var clip = MakeClip("Farhad_" + name, StrikeFrames(strike, impactFrame), StrikeFramesPerSecond * 2f, loop: false);
+                controller.AddParameter(name, AnimatorControllerParameterType.Trigger);
+                var strikeState = states.AddState(name);
+                strikeState.motion = clip;
+                var toStrike = states.AddAnyStateTransition(strikeState);
+                toStrike.hasExitTime = false;
+                toStrike.duration = 0f;
+                toStrike.AddCondition(AnimatorConditionMode.If, 0f, name);
+                var fromStrike = strikeState.AddTransition(idleState);
+                fromStrike.hasExitTime = true;
+                fromStrike.exitTime = 1f;
+                fromStrike.duration = 0f;
+
+                var timing = TimingOf(direction);
+                summary.Append($", {direction.ToString().ToLower()} to frame {impactFrame} " +
+                               $"(impact at {timing.impactTime:0.00}s of {timing.duration:0.00}s)");
+            }
 
             AssetDatabase.SaveAssets();
-            Debug.Log($"Farhad animations built: idle, {walk.Length} walk frames, {strike.Length} strike frames " +
-                      $"(impact at {StrikeImpactTime:0.00}s of {StrikeDuration:0.00}s)");
+            Debug.Log($"Farhad animations built: idle, {walk.Length} walk frames, {strike.Length} strike frames{summary}");
             return controller;
+        }
+
+        // The swing in steps of half a drawn frame: each frame up to the impact shown for two steps,
+        // the impact held, then the frames back down to the first shown for one step each.
+        static Sprite[] StrikeFrames(Sprite[] strike, int impactFrame)
+        {
+            var forward = strike.Take(impactFrame).SelectMany(frame => new[] { frame, frame });
+            var hold = Enumerable.Repeat(strike[impactFrame - 1], StrikeHoldFrames * 2);
+            var back = strike.Take(impactFrame - 1).Reverse();
+            return forward.Concat(hold).Concat(back).ToArray();
         }
 
         static Sprite[] ImportFrames(string folder, string prefix) =>

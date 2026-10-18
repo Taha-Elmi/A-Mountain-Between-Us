@@ -172,8 +172,9 @@ namespace Farhad.EditorTools
             farhad.animator = animator;
             if (animator != null)
             {
-                farhad.strikeImpactTime = FarhadArtSetup.StrikeImpactTime;
-                farhad.strikeDuration = FarhadArtSetup.StrikeDuration;
+                farhad.strikeUp = FarhadArtSetup.TimingOf(StrikeDirection.Up);
+                farhad.strikeSide = FarhadArtSetup.TimingOf(StrikeDirection.Side);
+                farhad.strikeDown = FarhadArtSetup.TimingOf(StrikeDirection.Down);
             }
             farhad.targetMarker = marker;
 

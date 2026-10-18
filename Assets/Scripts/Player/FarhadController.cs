@@ -5,6 +5,16 @@ using UnityEngine.SceneManagement;
 
 namespace Farhad
 {
+    public enum StrikeDirection { Up, Side, Down }
+
+    // Seconds from the start of a swing: when the pickaxe meets the rock, and when it is back.
+    [System.Serializable]
+    public struct StrikeTiming
+    {
+        public float impactTime;
+        public float duration;
+    }
+
     // Walking, jumping, and working the rock with left mouse. Hollow rock breaks; solid rock doesn't,
     // and striking it strains the mountain until it falls on him.
     [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D))]
@@ -22,13 +32,15 @@ namespace Farhad
         public float jumpHeight = 1.4f;
         public LayerMask groundMask = ~0;
 
-        // A strike is a swing: stamina is spent when it starts, the rock is hit at the impact moment
-        // (matched to the drawn animation), and he can't move or swing again until it ends.
+        // A strike is a swing: the rock is hit at the impact moment (matched to the drawn animation,
+        // which swings up, out or down by how far it goes), and he can't move or swing again until
+        // the pickaxe is back.
         [Header("Working the rock")]
-        public float strikeImpactTime = 0.42f;
         [Tooltip("When he grunts with the effort: as the pickaxe starts going up (frame 4 of the drawn animation).")]
         public float strikeGruntTime = 0.25f;
-        public float strikeDuration = 0.67f;
+        public StrikeTiming strikeUp = new() { impactTime = 0.33f, duration = 0.67f };
+        public StrikeTiming strikeSide = new() { impactTime = 0.58f, duration = 1.04f };
+        public StrikeTiming strikeDown = new() { impactTime = 0.67f, duration = 1.17f };
 
         [Header("Mountain strain")]
         [Tooltip("Strikes on solid rock (in quick succession) that bring the rockfall. 1: the first one does. " +
@@ -134,21 +146,38 @@ namespace Farhad
             rb.linearVelocity = new Vector2(moveInput * moveSpeed, vy);
         }
 
-        static readonly int StrikeId = Animator.StringToHash("Strike");
+        // The Animator trigger that plays the swing in each direction.
+        public static string StrikeParameter(StrikeDirection direction) => "Strike" + direction;
+        static readonly int[] StrikeIds =
+        {
+            Animator.StringToHash(StrikeParameter(StrikeDirection.Up)),
+            Animator.StringToHash(StrikeParameter(StrikeDirection.Side)),
+            Animator.StringToHash(StrikeParameter(StrikeDirection.Down)),
+        };
 
         void StartSwing(Vector3Int cell)
         {
+            // Turn toward rock beside him; rock above or below keeps his current facing.
+            int side = SideOf(cell);
+            if (side != 0) body.flipX = side < 0;
+            var direction = side != 0 ? StrikeDirection.Side
+                : mountain.rockMap.GetCellCenterWorld(cell).y > col.bounds.center.y ? StrikeDirection.Up
+                : StrikeDirection.Down;
+            var timing = direction switch
+            {
+                StrikeDirection.Up => strikeUp,
+                StrikeDirection.Side => strikeSide,
+                _ => strikeDown,
+            };
+
             swingCell = cell;
-            swingImpact = Time.time + strikeImpactTime;
-            swingEnd = Time.time + strikeDuration;
+            swingImpact = Time.time + timing.impactTime;
+            swingEnd = Time.time + timing.duration;
             swingLanded = false;
             swingGrunt = Time.time + strikeGruntTime;
             swingGrunted = false;
             moveInput = 0f;
-            // Turn toward rock beside him; rock above or below keeps his current facing.
-            int side = SideOf(cell);
-            if (side != 0) body.flipX = side < 0;
-            if (animator != null) animator.SetTrigger(StrikeId);
+            if (animator != null) animator.SetTrigger(StrikeIds[(int)direction]);
         }
 
         void LandSwing()
