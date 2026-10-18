@@ -513,7 +513,7 @@ MonoBehaviour:
   damagedTint: {r: 0.45, g: 0.38, b: 0.34, a: 1}
   revealMap: {fileID: 585909878}
   revealTile: {fileID: 11400000, guid: 808893e697dd9cf4ca45be3a831f274b, type: 2}
-  revealTint: {r: 1, g: 0.82, b: 0.5, a: 1}
+  revealTint: {r: 1, g: 1, b: 1, a: 1}
   revealFade: 0.6
 --- !u!4 &162398552
 Transform:

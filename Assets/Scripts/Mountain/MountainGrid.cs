@@ -20,12 +20,12 @@ namespace Farhad
         [Min(1)] public int hollowHits = 1;
         public Color damagedTint = new(0.45f, 0.38f, 0.34f);
 
-        // Revealed hollow rock is drawn over with the artist's loose-stone tile, tinted with the gold
-        // of Farhad's glow, on a tilemap just above the rock.
+        // Revealed hollow rock is drawn over with the artist's loose-stone tile in white, standing out
+        // from the grey ink of the drawn mountain, on a tilemap just above the rock.
         [Header("Revealing hollow rock")]
         public Tilemap revealMap;
         public TileBase revealTile;
-        public Color revealTint = new(1f, 0.82f, 0.5f);
+        public Color revealTint = Color.white;
         [Tooltip("Seconds the reveal takes to fade in, and again to fade out.")]
         [Min(0.01f)] public float revealFade = 0.6f;
 
