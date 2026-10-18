@@ -10,7 +10,8 @@ namespace Farhad
     // Plays a comic full screen, one page at a time: fades in from black, then shows the page's
     // words one line at a time (the first by itself, the rest when the player clicks or presses
     // Space / Enter / Right). After the last line the same input turns the page (a crossfade);
-    // Left or right-click goes back a page. Fades to black before loading the next scene; Escape
+    // Left or right-click goes back a page. A page without a picture is black; a page can take
+    // longer to fade in (see ComicScript). Fades to black before loading the next scene; Escape
     // skips the rest. The words are in the language the player chose (Persian by default).
     public class ComicPlayer : MonoBehaviour
     {
@@ -37,7 +38,7 @@ namespace Farhad
         const string HintEnglish = "Click to continue";
         const string HintPersian = "برای ادامه کلیک کنید";
 
-        List<List<ComicLine>> words;
+        List<ComicPage> pages;
         CanvasGroup linesGroup;
         int index;
         int shownLines;
@@ -50,13 +51,13 @@ namespace Farhad
 
         IEnumerator Start()
         {
-            if (comic == null || comic.pages.Count == 0)
+            pages = comic != null ? comic.ReadPages() : null;
+            if (pages == null || pages.Count == 0)
             {
                 LoadNextScene();
                 yield break;
             }
 
-            words = comic.ReadLines();
             linesGroup = lines.GetComponent<CanvasGroup>();
             if (linesGroup == null) linesGroup = lines.gameObject.AddComponent<CanvasGroup>();
             linesGroup.interactable = linesGroup.blocksRaycasts = false;
@@ -65,7 +66,7 @@ namespace Farhad
             hintAlpha = hint.color.a;
             SetAlpha(hint, 0f);
             SetAlpha(nextPage, 0f);
-            page.sprite = comic.pages[0].image;
+            ShowPicture(page, pages[0].image);
             ShowLines(0);
             Language.Changed += OnLanguageChanged;
             yield return Fade(blackout, 1f, 0f, fadeSeconds);
@@ -81,7 +82,7 @@ namespace Farhad
                     idle += DeltaTime;
                     FadeLinesIn();
                     step = ReadInput();
-                    float autoAdvance = comic.pages[index].autoAdvance;
+                    float autoAdvance = pages[index].autoAdvance;
                     if (autoAdvance > 0f && idle >= autoAdvance) step = 1;
                     if (step == 0 && shownLines == 0 && lines.Count > 0 && idle >= firstLineDelay)
                     {
@@ -99,7 +100,7 @@ namespace Farhad
                 }
 
                 int next = index + step;
-                if (step == Skip || next >= comic.pages.Count) break;
+                if (step == Skip || next >= pages.Count) break;
                 if (next < 0) continue; // already on the first page
 
                 // Going back shows the page as it was left, words and all.
@@ -114,18 +115,28 @@ namespace Farhad
 
         void OnLanguageChanged() => ShowLines(index, shownLines);
 
+        // The next page fades in over this one; the words go first, in the usual turn's time.
         IEnumerator TurnTo(int next, bool allLines)
         {
-            nextPage.sprite = comic.pages[next].image;
-            for (float t = 0f; t < turnSeconds; t += DeltaTime)
+            bool fromBlack = page.sprite == null;
+            ShowPicture(nextPage, pages[next].image);
+            SetAlpha(nextPage, 0f);
+            float seconds = pages[next].fadeSeconds > 0f ? pages[next].fadeSeconds : turnSeconds;
+            for (float t = 0f; t < seconds; t += DeltaTime)
             {
-                float a = Mathf.SmoothStep(0f, 1f, t / turnSeconds);
-                SetAlpha(nextPage, a);
-                linesGroup.alpha = 1f - a;
+                SetAlpha(nextPage, Mathf.SmoothStep(0f, 1f, t / seconds));
+                linesGroup.alpha = 1f - Mathf.SmoothStep(0f, 1f, t / turnSeconds);
                 yield return null;
             }
-            page.sprite = nextPage.sprite;
+            ShowPicture(page, nextPage.sprite);
             SetAlpha(nextPage, 0f);
+            // A black page covers the whole screen; coming out of one onto a picture that isn't
+            // the screen's shape, the margins around it turn from black to paper.
+            if (fromBlack && page.sprite != null)
+            {
+                paper.color = Color.black;
+                StartCoroutine(Fade(paper, comic.paper, turnSeconds));
+            }
             index = next;
             ShowLines(index, allLines ? int.MaxValue : 0);
             linesGroup.alpha = 1f;
@@ -134,9 +145,9 @@ namespace Farhad
         // Lays out the current page's words; the first `shown` of them are already visible.
         void ShowLines(int pageIndex, int shown = 0)
         {
-            var sprite = comic.pages[pageIndex].image;
+            var sprite = pages[pageIndex].image;
             float aspect = sprite != null ? sprite.rect.width / sprite.rect.height : 16f / 9f;
-            lines.Show(words[pageIndex], Language.Current, aspect);
+            lines.Show(pages[pageIndex].lines, Language.Current, aspect);
             shownLines = Mathf.Min(shown, lines.Count);
             lineAlphas.Clear();
             for (int i = 0; i < lines.Count; i++)
@@ -193,6 +204,24 @@ namespace Farhad
         {
             if (string.IsNullOrEmpty(nextScene)) Application.Quit();
             else SceneManager.LoadScene(nextScene);
+        }
+
+        // A page's picture, or black over the whole screen when it has none.
+        static void ShowPicture(Image image, Sprite sprite)
+        {
+            image.sprite = sprite;
+            image.color = sprite != null ? Color.white : Color.black;
+        }
+
+        static IEnumerator Fade(Graphic graphic, Color to, float seconds)
+        {
+            Color from = graphic.color;
+            for (float t = 0f; t < seconds; t += DeltaTime)
+            {
+                graphic.color = Color.Lerp(from, to, Mathf.SmoothStep(0f, 1f, t / seconds));
+                yield return null;
+            }
+            graphic.color = to;
         }
 
         static IEnumerator Fade(Graphic graphic, float from, float to, float seconds)

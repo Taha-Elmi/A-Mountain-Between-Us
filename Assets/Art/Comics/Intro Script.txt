@@ -1,6 +1,6 @@
 # The words of the Intro comic, in Persian (fa, the default) and English (en).
-# One block per page, in the order the pages play (panel1.jpg is page 1). The lines of a page
-# appear one per click, in the order written here.
+# One block per page, in the order the pages play; the name in brackets is the image it shows
+# ((black) for a black page). The lines of a page appear one per click, in the order written here.
 #
 # Each line starts with who says it in [brackets], then how its box looks and where it sits:
 #   caption        a square box (narration, or Farhad telling the story); [Narration] is one anyway

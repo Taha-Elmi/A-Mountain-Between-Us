@@ -18,8 +18,9 @@ namespace Farhad.EditorTools
     //
     // Page spec: one 16:9 image per page, the whole screen as the artist wants it seen (frame and
     // white margin included), ideally 3840x2160 so it stays sharp at 4K; 1920x1080 works too.
-    // The words go in Assets/Art/Comics/<folder> Script.txt (format in ComicScript); saving it
-    // checks it and reports mistakes in the Console.
+    // The words go in Assets/Art/Comics/<folder> Script.txt (format in ComicScript), which also
+    // says which image each page shows, or that it's black; saving it checks it and reports
+    // mistakes in the Console.
     // Farhad > Build Comic Scenes makes the ComicIntro and ComicOutro scenes that play them;
     // Farhad > Preview Comic Words draws every page with its words, in both languages, as
     // pictures in ComicPreviews/ (outside Assets) to check the layout without playing.
@@ -131,17 +132,15 @@ namespace Farhad.EditorTools
         }
 
         // Reports mistakes in a comic's script: rows it can't read, missing translations, and
-        // words for pages that don't exist.
+        // images that aren't there.
         static void CheckScript(ComicSequence comic, string name)
         {
             if (comic.script == null) return;
             var problems = new List<string>();
-            var pages = ComicScript.Parse(comic.script.text, problems);
+            var pages = comic.ReadPages(problems);
             for (int i = 0; i < pages.Count; i++)
             {
-                if (i >= comic.pages.Count && pages[i].Count > 0)
-                    problems.Add($"Page {i + 1} has words but the comic has only {comic.pages.Count} page{(comic.pages.Count == 1 ? "" : "s")}.");
-                foreach (var line in pages[i])
+                foreach (var line in pages[i].lines)
                 {
                     if (string.IsNullOrEmpty(line.persian)) problems.Add($"Page {i + 1}, [{line.speaker}]: no Persian (fa:) text.");
                     if (string.IsNullOrEmpty(line.english)) problems.Add($"Page {i + 1}, [{line.speaker}]: no English (en:) text.");
@@ -248,11 +247,11 @@ namespace Farhad.EditorTools
                 string name = Path.GetFileName(folder);
                 var comic = AssetDatabase.LoadAssetAtPath<ComicSequence>($"{ComicsDir}/{name}.asset");
                 if (comic == null) continue;
-                var words = comic.ReadLines();
-                for (int i = 0; i < comic.pages.Count; i++)
+                var pages = comic.ReadPages();
+                for (int i = 0; i < pages.Count; i++)
                     foreach (Lang lang in Enum.GetValues(typeof(Lang)))
                     {
-                        RenderPreview(comic.paper, comic.pages[i].image, words[i], lang, $"{PreviewDir}/{name}_{i + 1:00}_{lang}.png");
+                        RenderPreview(comic.paper, pages[i].image, pages[i].lines, lang, $"{PreviewDir}/{name}_{i + 1:00}_{lang}.png");
                         count++;
                     }
             }
@@ -275,7 +274,7 @@ namespace Farhad.EditorTools
                 cam.orthographicSize = height * 0.5f;
                 cam.transform.position = new Vector3(0f, 0f, -10f);
                 cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = paper;
+                cam.backgroundColor = image != null ? paper : Color.black;
                 cam.targetTexture = target;
 
                 var canvasObject = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas));
@@ -288,6 +287,7 @@ namespace Farhad.EditorTools
                 var pageImage = FullScreenImage(canvasObject.transform, "Page", Color.white);
                 pageImage.sprite = image;
                 pageImage.preserveAspect = true;
+                pageImage.enabled = image != null; // a black page
                 var lines = MakeLines(canvasObject.transform);
                 float aspect = image != null ? image.rect.width / image.rect.height : 16f / 9f;
                 lines.Show(words, lang, aspect);

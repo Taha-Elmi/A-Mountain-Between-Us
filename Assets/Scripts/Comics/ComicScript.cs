@@ -9,6 +9,8 @@ namespace Farhad
     {
         Caption, // a square box: narration, or Farhad telling the story
         Speech,  // a rounded bubble, with a tail pointing at whoever speaks
+        Oval,    // an elliptical bubble, for voices on a black page
+        Plain,   // the words alone, light on the dark: no box
     }
 
     // One line of a comic page in both languages, and where it sits on the page.
@@ -34,24 +36,37 @@ namespace Farhad
         }
     }
 
+    // A page as the script writes it: which picture it shows, and its words.
+    public class ScriptPage
+    {
+        public const string Black = "black";
+
+        public string image;      // a file name in the comic's folder, "black" for none, or empty for the next image
+        public float fadeSeconds; // how long the page takes to fade in; 0 for the comic's usual page turn
+        public List<ComicLine> lines = new();
+
+        public bool IsBlack => string.Equals(image, Black, StringComparison.OrdinalIgnoreCase);
+    }
+
     // Reads a comic's script file (Assets/Art/Comics/<name> Script.txt):
     //
-    //   == Page 1 ==                                        a new page; lines follow in order
+    //   == Page 1 (panel1.jpg) fade 3 ==                    a new page showing that image (or
+    //                                                       (black) for none), fading in over 3 s
     //   [Farhad] speech at 62 15 width 30 tail 55 40        who speaks, then optionally the box's
     //   fa: ...                                             style, centre, width and tail tip
     //   en: ...                                             (all in percent of the page)
     //
-    // Lines starting with # are notes. [Narration] lines are captions unless told otherwise,
-    // everyone else speaks in bubbles.
+    // Lines starting with # are notes. A second fa: or en: row starts a new row of that text.
+    // [Narration] lines are captions unless told otherwise, everyone else speaks in bubbles.
     public static class ComicScript
     {
-        // The lines of each page, in order: pages[0] is the first page.
-        public static List<List<ComicLine>> Parse(string text, List<string> problems = null)
+        // The pages, in order: pages[0] is the first page.
+        public static List<ScriptPage> Parse(string text, List<string> problems = null)
         {
-            var pages = new List<List<ComicLine>>();
+            var pages = new List<ScriptPage>();
             if (string.IsNullOrEmpty(text)) return pages;
 
-            List<ComicLine> page = null;
+            ScriptPage page = null;
             ComicLine line = null;
             string[] rows = text.Replace("\r", "").Split('\n');
             for (int n = 0; n < rows.Length; n++)
@@ -61,7 +76,15 @@ namespace Farhad
 
                 if (row.StartsWith("=="))
                 {
-                    string[] words = row.Trim('=', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    string header = row.Trim('=', ' ');
+                    string image = null;
+                    int open = header.IndexOf('('), close = header.IndexOf(')');
+                    if (open >= 0 && close > open)
+                    {
+                        image = header.Substring(open + 1, close - open - 1).Trim();
+                        header = header.Remove(open, close - open + 1);
+                    }
+                    string[] words = header.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     int number = pages.Count + 1;
                     if (words.Length >= 2 && int.TryParse(words[1], out int given)) number = given;
                     if (number < 1)
@@ -69,8 +92,18 @@ namespace Farhad
                         problems?.Add($"Row {n + 1}: page {number} doesn't exist; pages start at 1.");
                         number = pages.Count + 1;
                     }
-                    while (pages.Count < number) pages.Add(new List<ComicLine>());
+                    while (pages.Count < number) pages.Add(new ScriptPage());
                     page = pages[number - 1];
+                    page.image = image;
+                    for (int i = 2; i < words.Length; i++)
+                    {
+                        if (words[i].Equals("fade", StringComparison.OrdinalIgnoreCase) && Numbers(words, i, 1, out var fade))
+                        {
+                            page.fadeSeconds = Mathf.Max(0f, fade[0]);
+                            i += 1;
+                        }
+                        else problems?.Add($"Row {n + 1}: didn't understand \"{words[i]}\" (expected (image), then optionally fade S).");
+                    }
                     line = null;
                 }
                 else if (row.StartsWith("["))
@@ -83,12 +116,12 @@ namespace Farhad
                     }
                     if (page == null)
                     {
-                        pages.Add(page = new List<ComicLine>());
+                        pages.Add(page = new ScriptPage());
                     }
                     line = new ComicLine { speaker = row.Substring(1, close - 1).Trim() };
                     line.style = line.speaker.Equals("Narration", StringComparison.OrdinalIgnoreCase) ? LineStyle.Caption : LineStyle.Speech;
                     ReadPlacement(row.Substring(close + 1), line, n + 1, problems);
-                    page.Add(line);
+                    page.lines.Add(line);
                 }
                 else if (row.StartsWith("fa:") || row.StartsWith("en:"))
                 {
@@ -98,8 +131,9 @@ namespace Farhad
                         continue;
                     }
                     string words = row.Substring(3).Trim();
-                    if (row.StartsWith("fa:")) line.persian = words;
-                    else line.english = words;
+                    static string Add(string text, string more) => string.IsNullOrEmpty(text) ? more : text + "\n" + more;
+                    if (row.StartsWith("fa:")) line.persian = Add(line.persian, words);
+                    else line.english = Add(line.english, words);
                 }
                 else
                 {
@@ -118,6 +152,8 @@ namespace Farhad
                 {
                     case "caption": line.style = LineStyle.Caption; break;
                     case "speech": line.style = LineStyle.Speech; break;
+                    case "oval": line.style = LineStyle.Oval; break;
+                    case "plain": line.style = LineStyle.Plain; break;
                     case "at" when Numbers(words, i, 2, out var at):
                         line.at = new Vector2(at[0], at[1]);
                         i += 2;
@@ -132,7 +168,7 @@ namespace Farhad
                         i += 2;
                         break;
                     default:
-                        problems?.Add($"Row {row}: didn't understand \"{words[i]}\" (expected caption, speech, at X Y, width W or tail X Y).");
+                        problems?.Add($"Row {row}: didn't understand \"{words[i]}\" (expected caption, speech, oval, plain, at X Y, width W or tail X Y).");
                         break;
                 }
             }

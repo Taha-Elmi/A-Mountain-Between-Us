@@ -7,8 +7,10 @@ namespace Farhad
 {
     // The words on a comic page: one box per line, drawn in ink on paper like the panels, sized
     // to its text and placed where the script says. Captions are square boxes; speech bubbles
-    // are rounded, with a tail. Persian is joined and laid out right to left here, since Unity's
-    // Text can't do either. The boxes start hidden; the player fades them in one by one.
+    // are rounded, with a tail; oval bubbles are ellipses. Plain lines are the words alone, in
+    // the paper's colour, for black pages and dark pictures. Persian is joined and laid out right
+    // to left here, since Unity's Text can't do either. The boxes start hidden; the player fades
+    // them in one by one.
     [RequireComponent(typeof(RectTransform))]
     public class ComicLines : MonoBehaviour
     {
@@ -26,6 +28,8 @@ namespace Farhad
         // Everything below is measured on a page 1080 tall.
         static readonly Vector2 CaptionPadding = new(24f, 14f);
         static readonly Vector2 SpeechPadding = new(36f, 22f);
+        static readonly Vector2 OvalPadding = new(24f, 36f); // beyond the ellipse through the text's corners
+        static readonly Vector2 PlainShadow = new(2f, -2f);
         const float SpeechCorner = 44f;
         const float CaptionCorner = 2f;
         const float TailWidth = 20f; // half the tail's width where it leaves the bubble
@@ -79,6 +83,8 @@ namespace Farhad
             float k = page.y / 1080f;
             bool rtl = lang == Lang.Persian;
             bool speech = line.style == LineStyle.Speech;
+            bool oval = line.style == LineStyle.Oval;
+            bool plain = line.style == LineStyle.Plain;
 
             var box = new GameObject(line.speaker, typeof(RectTransform), typeof(CanvasGroup));
             box.transform.SetParent(transform, false);
@@ -86,34 +92,48 @@ namespace Farhad
             group.alpha = 0f;
             group.interactable = group.blocksRaycasts = false;
 
-            var shape = new GameObject("Shape", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-            shape.transform.SetParent(box.transform, false);
-            shape.raycastTarget = false;
+            Image shape = null;
+            if (!plain)
+            {
+                shape = new GameObject("Shape", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+                shape.transform.SetParent(box.transform, false);
+                shape.raycastTarget = false;
+            }
 
             var text = new GameObject("Text", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
             text.transform.SetParent(box.transform, false);
             text.font = rtl ? persianFont : englishFont;
             text.fontSize = Mathf.Max(1, Mathf.RoundToInt((rtl ? persianSize : englishSize) * k));
             text.lineSpacing = lineSpacing;
-            text.color = ink;
+            text.color = plain ? paper : ink;
             text.supportRichText = false;
             text.raycastTarget = false;
             text.horizontalOverflow = HorizontalWrapMode.Overflow; // lines are broken here, not by Text
             text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.alignment = speech ? TextAnchor.MiddleCenter : rtl ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+            text.alignment = line.style == LineStyle.Caption ? rtl ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
+            if (plain)
+            {
+                // A soft shadow keeps the words clear where a picture runs light behind them.
+                var shadow = text.gameObject.AddComponent<Shadow>();
+                shadow.effectColor = new Color(ink.r, ink.g, ink.b, 0.8f);
+                shadow.effectDistance = PlainShadow * k;
+            }
 
-            Vector2 padding = (speech ? SpeechPadding : CaptionPadding) * k;
+            Vector2 padding = (plain ? Vector2.zero : speech ? SpeechPadding : oval ? OvalPadding : CaptionPadding) * k;
             var generator = new TextGenerator();
             var settings = text.GetGenerationSettings(Vector2.zero);
             float unitsPerPixel = 1f / text.pixelsPerUnit;
             float Measure(string s) => generator.GetPreferredWidth(s, settings) * unitsPerPixel;
 
-            float maxWidth = Mathf.Max(line.width / 100f * page.x - 2f * padding.x, 60f * k);
+            float maxWidth = line.width / 100f * page.x - 2f * padding.x;
+            if (oval) maxWidth /= Mathf.Sqrt(2f);
+            maxWidth = Mathf.Max(maxWidth, 60f * k);
             var rows = Wrap(line.Text(lang) ?? "", rtl, maxWidth, Measure, out float textWidth);
             text.text = string.Join("\n", rows);
             var inner = new Vector2(textWidth, generator.GetPreferredHeight(text.text, settings) * unitsPerPixel);
             text.rectTransform.sizeDelta = inner;
-            Vector2 size = inner + 2f * padding;
+            // An oval runs through the corners of a box its own shape around the text.
+            Vector2 size = (oval ? inner * Mathf.Sqrt(2f) : inner) + 2f * padding;
 
             // The script places boxes in percent of the page from its top-left; here the page's
             // centre is the origin. Boxes stay on the page.
@@ -125,9 +145,10 @@ namespace Farhad
             boxRect.sizeDelta = size;
             boxRect.anchoredPosition = centre;
 
+            if (plain) return group;
             float scale = Mathf.Max(1f, GetComponentInParent<Canvas>().rootCanvas.scaleFactor);
             Vector2? tip = line.hasTail ? FromScript(line.tail) - centre : null;
-            shape.sprite = DrawShape(size, speech ? SpeechCorner * k : CaptionCorner * k, tip, TailWidth * k,
+            shape.sprite = DrawShape(size, oval, speech ? SpeechCorner * k : CaptionCorner * k, tip, TailWidth * k,
                 outline * k, scale, out var bounds);
             shape.rectTransform.anchoredPosition = bounds.center;
             shape.rectTransform.sizeDelta = bounds.size;
@@ -135,34 +156,39 @@ namespace Farhad
         }
 
         // Breaks the text into rows no wider than maxWidth, as evenly as it can (the narrowest
-        // width that needs no more rows), and returns them in drawing order.
+        // width that needs no more rows), and returns them in drawing order. A row break in the
+        // text always starts a new row.
         static List<string> Wrap(string text, bool rtl, float maxWidth, Func<string, float> measure, out float width)
         {
-            if (rtl) text = PersianText.Shape(text);
-            string[] words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var paragraphs = new List<string[]>();
+            foreach (string paragraph in text.Split('\n'))
+                paragraphs.Add((rtl ? PersianText.Shape(paragraph) : paragraph).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
             string Drawn(string row) => rtl ? PersianText.Visual(row) : row;
 
             List<string> Fill(float limit)
             {
                 var rows = new List<string>();
-                string row = "";
-                foreach (string word in words)
+                foreach (string[] words in paragraphs)
                 {
-                    string longer = row.Length == 0 ? word : row + " " + word;
-                    if (row.Length > 0 && measure(Drawn(longer)) > limit)
+                    string row = "";
+                    foreach (string word in words)
                     {
-                        rows.Add(row);
-                        row = word;
+                        string longer = row.Length == 0 ? word : row + " " + word;
+                        if (row.Length > 0 && measure(Drawn(longer)) > limit)
+                        {
+                            rows.Add(row);
+                            row = word;
+                        }
+                        else row = longer;
                     }
-                    else row = longer;
+                    if (row.Length > 0) rows.Add(row);
                 }
-                if (row.Length > 0) rows.Add(row);
                 return rows;
             }
 
             var best = Fill(maxWidth);
             float low = 0f, high = maxWidth;
-            for (int i = 0; i < 12 && best.Count > 1; i++)
+            for (int i = 0; i < 12 && best.Count > paragraphs.Count; i++)
             {
                 float mid = (low + high) * 0.5f;
                 var rows = Fill(mid);
@@ -183,22 +209,33 @@ namespace Farhad
             return best;
         }
 
-        // Paints the box (centred on the origin), joined to a tail running to tip if it's outside
-        // the box: white inside, an ink outline, soft edges. Drawn at screen resolution.
-        Sprite DrawShape(Vector2 size, float corner, Vector2? tip, float tailWidth, float border, float scale, out Rect bounds)
+        // Paints the box (centred on the origin; an ellipse filling it if oval), joined to a tail
+        // running to tip if it's outside the box: white inside, an ink outline, soft edges. Drawn
+        // at screen resolution.
+        Sprite DrawShape(Vector2 size, bool oval, float corner, Vector2? tip, float tailWidth, float border, float scale, out Rect bounds)
         {
             Vector2 half = size * 0.5f;
             corner = Mathf.Min(corner, half.x, half.y);
+            float Body(Vector2 p) => oval ? Ellipse(p, half) : RoundedBox(p, half, corner);
 
-            bool tail = tip.HasValue && (Mathf.Abs(tip.Value.x) > half.x || Mathf.Abs(tip.Value.y) > half.y);
+            bool tail = tip.HasValue && Body(tip.Value) > 0f;
             Vector2 tailTip = tip ?? Vector2.zero, sideA = default, sideB = default;
             if (tail)
             {
-                // The tail starts well inside the box, at the point nearest the tip, so the box's
-                // outline is hidden where they meet.
+                // The tail starts well inside the box, at the point nearest the tip (an oval's:
+                // toward it), so the box's outline is hidden where they meet.
                 tailWidth = Mathf.Min(tailWidth, half.x * 0.4f, half.y * 0.6f);
-                Vector2 inset = Vector2.Max(half - Vector2.one * (corner + tailWidth), Vector2.zero);
-                var root = new Vector2(Mathf.Clamp(tailTip.x, -inset.x, inset.x), Mathf.Clamp(tailTip.y, -inset.y, inset.y));
+                Vector2 root;
+                if (oval)
+                {
+                    Vector2 toward = new Vector2(tailTip.x / half.x, tailTip.y / half.y).normalized * 0.7f;
+                    root = Vector2.Scale(toward, half);
+                }
+                else
+                {
+                    Vector2 inset = Vector2.Max(half - Vector2.one * (corner + tailWidth), Vector2.zero);
+                    root = new Vector2(Mathf.Clamp(tailTip.x, -inset.x, inset.x), Mathf.Clamp(tailTip.y, -inset.y, inset.y));
+                }
                 Vector2 along = (tailTip - root).normalized;
                 Vector2 across = new Vector2(-along.y, along.x) * tailWidth;
                 sideA = root + across;
@@ -218,7 +255,7 @@ namespace Farhad
             for (int x = 0; x < w; x++)
             {
                 var p = min + new Vector2(x + 0.5f, y + 0.5f) / scale;
-                float d = RoundedBox(p, half, corner);
+                float d = Body(p);
                 if (tail) d = Mathf.Min(d, Triangle(p, sideA, sideB, tailTip));
                 d *= scale;
                 float alpha = Mathf.Clamp01(0.5f - d);
@@ -249,6 +286,14 @@ namespace Farhad
         {
             var q = new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - half + Vector2.one * corner;
             return Vector2.Max(q, Vector2.zero).magnitude + Mathf.Min(Mathf.Max(q.x, q.y), 0f) - corner;
+        }
+
+        // Close to the true distance near the outline, which is all the drawing needs.
+        static float Ellipse(Vector2 p, Vector2 radii)
+        {
+            float k0 = new Vector2(p.x / radii.x, p.y / radii.y).magnitude;
+            float k1 = new Vector2(p.x / (radii.x * radii.x), p.y / (radii.y * radii.y)).magnitude;
+            return k1 > 0f ? k0 * (k0 - 1f) / k1 : -Mathf.Min(radii.x, radii.y);
         }
 
         static float Triangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c)

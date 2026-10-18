@@ -1,0 +1,73 @@
+# The words of the Outro comic, in Persian (fa, the default) and English (en). It plays once
+# Farhad is through the mountain, and then the game returns to the main menu.
+# One block per page, in the order the pages play; the name in brackets is the image it shows
+# ((black) for a black page), and "fade S" makes the page take S seconds to come in. The lines
+# of a page appear one per click, in the order written here.
+#
+# Each line starts with who says it in [brackets], then how its box looks and where it sits:
+#   caption        a square box (narration, or Farhad telling the story); [Narration] is one anyway
+#   speech         a rounded bubble (everyone else, unless told caption)
+#   oval           an elliptical bubble
+#   plain          the words alone, light on the dark, no box
+#   at X Y         the box's centre, in percent of the page from its top-left corner
+#   width W        the widest the box may grow, in percent of the page's width
+#   tail X Y       a bubble's tail points here (percent of the page, as above)
+# then its text in both languages; another fa: or en: row starts a new row of the text.
+# Farhad > Preview Comic Words draws every page with its words into ComicPreviews/ to check the
+# layout.
+#
+# Speakers:
+#   [Narration]  نریشن
+#   [Messenger]  فرستاده قصر
+#   [Farhad]     فرهاد
+
+== Page 1 (black) ==
+
+[Narration] plain at 50 50 width 70
+fa: بیستون سرانجام تسلیم شد...
+fa: صخره‌های سرسخت در برابر تیشهٔ عشق زانو زدند و راهِ وصال باز شد.
+en: Bisotun yielded at last...
+en: Its stubborn cliffs knelt before the pickaxe of love, and the road to union lay open.
+
+== Page 2 (black) ==
+
+[Narration] plain at 50 50 width 70
+fa: اما در آن‌سوی کوه، تقدیرِ شوم در انتظارش بود؛
+fa: خبری که از سنگ‌های بیستون هم سنگین‌تر بود...
+en: But on the far side of the mountain, a cruel fate lay waiting for him;
+en: news heavier even than the stones of Bisotun...
+
+== Page 3 (black) ==
+
+# The palace's messenger and Farhad are off the page; their tails point the way to them.
+[Messenger] oval at 38 34 width 56 tail 12 22
+fa: بیهوده تیشه بر زمین کوبیدی، ای سنگ‌تراش...
+fa: شیرینِ تو، دیگر در این دنیا نیست. او مرده است!
+en: You struck the earth in vain, stonecutter...
+en: Your Shirin is no longer of this world. She is dead!
+
+[Farhad] oval at 66 70 width 30 tail 80 84
+fa: شیرین... مرده؟...
+en: Shirin... dead?...
+
+== Page 4 (black) ==
+
+[Narration] plain at 50 50 width 70
+fa: جهان در چشمِ فرهاد تیره و تار شد.
+fa: تیشه‌ای که روزی کوه را می‌لرزاند، از دستش رها شد...
+en: The world went dark before Farhad's eyes.
+en: The pickaxe that once made the mountain tremble slipped from his hand...
+
+== Page 5 (Falling.jpg) fade 4 ==
+
+[Narration] plain at 40 12 width 46
+fa: فرهاد، سبک‌تر از همیشه، خود را به آغوشِ سقوط سپرد.
+fa: او رفت... تا شاید در دیاری دیگر، به شیرینش برسد.
+en: Farhad, lighter than ever before, gave himself to the arms of the fall.
+en: He was gone... perhaps to reach his Shirin in another land.
+
+[Narration] plain at 72 88 width 50
+fa: کوهی که میان آن‌ها بود، بالاخره فرو ریخت...
+fa: اما نه با ضربه‌های تیشه، که با آوارِ یک دروغ.
+en: The mountain that stood between them came down at last...
+en: not under the blows of the pickaxe, but under the rubble of a lie.
