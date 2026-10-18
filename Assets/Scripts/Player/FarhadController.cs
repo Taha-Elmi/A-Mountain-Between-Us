@@ -26,6 +26,8 @@ namespace Farhad
         // (matched to the drawn animation), and he can't move or swing again until it ends.
         [Header("Working the rock")]
         public float strikeImpactTime = 0.42f;
+        [Tooltip("When he grunts with the effort: as the pickaxe starts going up (frame 4 of the drawn animation).")]
+        public float strikeGruntTime = 0.25f;
         public float strikeDuration = 0.67f;
 
         [Header("Mountain strain")]
@@ -51,6 +53,8 @@ namespace Farhad
         float swingEnd;
         float swingImpact;
         bool swingLanded = true;
+        float swingGrunt;
+        bool swingGrunted = true;
         Vector3Int swingCell;
         float lastStrainTime;
         float deathTime;
@@ -78,6 +82,11 @@ namespace Farhad
             }
 
             moveInput = 0f;
+            if (!swingGrunted && Time.time >= swingGrunt)
+            {
+                swingGrunted = true;
+                sounds.PlayGrunt();
+            }
             if (!swingLanded && Time.time >= swingImpact) LandSwing();
             if (IsSwinging)
             {
@@ -133,6 +142,8 @@ namespace Farhad
             swingImpact = Time.time + strikeImpactTime;
             swingEnd = Time.time + strikeDuration;
             swingLanded = false;
+            swingGrunt = Time.time + strikeGruntTime;
+            swingGrunted = false;
             moveInput = 0f;
             // Turn toward rock beside him; rock above or below keeps his current facing.
             int side = SideOf(cell);

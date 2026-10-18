@@ -155,6 +155,9 @@ MonoBehaviour:
   smoothTime: 0.15
   minBounds: {x: 0, y: 0}
   maxBounds: {x: 30, y: 17}
+  zoomSteps: 3
+  overviewHold: 2.5
+  zoomSmoothTime: 0.25
 --- !u!81 &135524493
 AudioListener:
   m_ObjectHideFlags: 0
@@ -4733,8 +4736,8 @@ MonoBehaviour:
   mountain: {fileID: 2129330852}
   callKey: 31
   calls: 3
-  revealRadius: 3
-  revealDuration: 5
+  revealRadius: 7.5
+  revealDuration: 3
   revealSpread: 10
 --- !u!114 &802116827
 MonoBehaviour:
@@ -4760,6 +4763,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   strikeImpactTime: 0.41666666
+  strikeGruntTime: 0.25
   strikeDuration: 0.6666667
   strainLimit: 1
   strainRecovery: 0.35
@@ -4792,6 +4796,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 527efcc1144ffb4418aa23c2f058d6b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  callTakes:
+  - {fileID: 8300000, guid: 3502dd9d9266e9142bd6f7b096bc069c, type: 3}
+  - {fileID: 8300000, guid: 9ba8195580430ee4db238c695e44bbf1, type: 3}
+  - {fileID: 8300000, guid: c3ce587bcd7edcb4cab7129bba969a8d, type: 3}
+  callVolume: 1
+  callEchoDelay: 0.38
+  callEchoDecay: 0.45
+  callEchoes: 4
+  callEchoDamping: 0.5
+  freshGrunts:
+  - {fileID: 8300000, guid: 05704cd1f6a5a164d88f9dbe6daf2a35, type: 3}
+  strainedGrunts:
+  - {fileID: 8300000, guid: 92c61ff957c45b744ba6eddd0ce1769b, type: 3}
+  tiredGrunts:
+  - {fileID: 8300000, guid: 82641e5919839bb4c950ec7a0009256c, type: 3}
+  - {fileID: 8300000, guid: f48618f0e1c101143903081fbe1dd10b, type: 3}
+  - {fileID: 8300000, guid: e6c6cc512213a28438cb550bc3058fa9, type: 3}
+  gruntVolume: 1
+  gruntPitchVariation: 0.03
 --- !u!82 &802116830
 AudioSource:
   m_ObjectHideFlags: 0

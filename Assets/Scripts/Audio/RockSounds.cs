@@ -10,13 +10,49 @@ namespace Farhad
     {
         const int SampleRate = 44100;
 
-        AudioSource source;
+        [Tooltip("Recorded takes of Farhad calling Shirin; played in order, one per call, so he grows sadder each time; the last repeats if he calls more often. Empty: the synthesized placeholder.")]
+        public AudioClip[] callTakes;
+        [Range(0f, 1f)] public float callVolume = 1f;
+
+        [Header("Echo on the call")]
+        [Tooltip("Seconds between Farhad's voice and each echo coming back from the mountain.")]
+        [Min(0.01f)] public float callEchoDelay = 0.38f;
+        [Tooltip("How loud each echo is compared to the one before it.")]
+        [Range(0f, 1f)] public float callEchoDecay = 0.45f;
+        [Min(0)] public int callEchoes = 4;
+        [Tooltip("How much each echo loses its brightness as it carries through the rock.")]
+        [Range(0f, 1f)] public float callEchoDamping = 0.5f;
+
+        [Header("Farhad's voice when he strikes")]
+        [Tooltip("Before his second call to Shirin.")]
+        public AudioClip[] freshGrunts;
+        [Tooltip("After his second call, before the third.")]
+        public AudioClip[] strainedGrunts;
+        [Tooltip("After his third call.")]
+        public AudioClip[] tiredGrunts;
+        [Range(0f, 1f)] public float gruntVolume = 1f;
+        [Tooltip("Random pitch change on each grunt, so repeats don't sound identical.")]
+        [Range(0f, 0.2f)] public float gruntPitchVariation = 0.03f;
+
+        // Each voice plays on its own source: a source's pitch applies to everything it is playing, so the
+        // rock's pitch wobble or a grunt's would otherwise bend a call that is still echoing.
+        AudioSource source, callSource, gruntSource;
         AudioClip solidHit, hollowHit, rockBreak, rumble, rockfall, call;
+        AudioClip[] echoedTakes;
+        int callsMade;
+        AudioClip lastGrunt;
         readonly System.Random noise = new(7);
 
         void Awake()
         {
             source = GetComponent<AudioSource>();
+            callSource = AddVoiceSource();
+            gruntSource = AddVoiceSource();
+
+            // The echo is baked into copies of the takes rather than put on the AudioSource, so only his
+            // voice echoes and the tail isn't cut off when the clip ends.
+            if (callTakes != null)
+                echoedTakes = Array.ConvertAll(callTakes, WithEcho);
 
             // Solid: a short dull thud.
             solidHit = Make("SolidHit", 0.2f, t =>
@@ -50,12 +86,88 @@ namespace Farhad
             if (broke) Play(rockBreak, 0.6f);
         }
 
+        // He tires as he calls: the grunts change after his second and third calls.
+        public void PlayGrunt()
+        {
+            var grunts = callsMade >= 3 ? tiredGrunts : callsMade == 2 ? strainedGrunts : freshGrunts;
+            if (grunts == null || grunts.Length == 0) return;
+
+            // A random one, but not the same one twice in a row.
+            var grunt = grunts[UnityEngine.Random.Range(0, grunts.Length)];
+            if (grunt == lastGrunt && grunts.Length > 1)
+                grunt = grunts[(Array.IndexOf(grunts, grunt) + UnityEngine.Random.Range(1, grunts.Length)) % grunts.Length];
+            lastGrunt = grunt;
+
+            gruntSource.pitch = 1f + UnityEngine.Random.Range(-gruntPitchVariation, gruntPitchVariation);
+            gruntSource.PlayOneShot(grunt, gruntVolume);
+        }
+
         // severity: 0..1, how close the mountain is to collapsing.
         public void PlayRumble(float severity) => Play(rumble, 0.3f + 0.7f * severity);
 
         public void PlayRockfall() => Play(rockfall, 1f);
 
-        public void PlayCall() => Play(call, 0.6f);
+        public void PlayCall()
+        {
+            int take = callsMade++;
+            if (echoedTakes == null || echoedTakes.Length == 0)
+            {
+                Play(call, 0.6f);
+                return;
+            }
+            // His own voice: no pitch wobble, or it stops sounding like him.
+            callSource.PlayOneShot(echoedTakes[Mathf.Min(take, echoedTakes.Length - 1)], callVolume);
+        }
+
+        AudioSource AddVoiceSource()
+        {
+            var voice = gameObject.AddComponent<AudioSource>();
+            voice.playOnAwake = false;
+            voice.outputAudioMixerGroup = source.outputAudioMixerGroup;
+            voice.volume = source.volume;
+            voice.spatialBlend = source.spatialBlend;
+            return voice;
+        }
+
+        // A copy of the take with its echoes coming back from the mountain, each quieter and duller than
+        // the last.
+        AudioClip WithEcho(AudioClip dry)
+        {
+            if (dry == null || callEchoes == 0) return dry;
+
+            int channels = dry.channels;
+            var input = new float[dry.samples * channels];
+            dry.GetData(input, 0);
+
+            int delay = Mathf.RoundToInt(callEchoDelay * dry.frequency) * channels;
+            var output = new float[input.Length + callEchoes * delay];
+            Array.Copy(input, output, input.Length);
+
+            var echo = (float[])input.Clone();
+            float smoothing = Mathf.Lerp(1f, 0.15f, callEchoDamping);
+            for (int k = 1; k <= callEchoes; k++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    float low = 0f;
+                    for (int i = c; i < echo.Length; i += channels)
+                    {
+                        low += smoothing * (echo[i] - low);
+                        echo[i] = low * callEchoDecay;
+                    }
+                }
+                for (int i = 0; i < echo.Length; i++) output[k * delay + i] += echo[i];
+            }
+
+            float peak = 0f;
+            foreach (float v in output) peak = Mathf.Max(peak, Mathf.Abs(v));
+            if (peak > 0.99f)
+                for (int i = 0; i < output.Length; i++) output[i] *= 0.99f / peak;
+
+            var clip = AudioClip.Create(dry.name + "_echo", output.Length / channels, channels, dry.frequency, false);
+            clip.SetData(output, 0);
+            return clip;
+        }
 
         void Play(AudioClip clip, float volume)
         {
