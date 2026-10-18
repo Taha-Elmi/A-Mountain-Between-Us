@@ -1,5 +1,4 @@
 using System.IO;
-using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -193,9 +192,7 @@ namespace Farhad.EditorTools
             hud.goal = goal;
 
             EditorSceneManager.SaveScene(scene, ScenePath);
-            var buildScenes = EditorBuildSettings.scenes.Where(s => s.path != ScenePath).ToList();
-            buildScenes.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
-            EditorBuildSettings.scenes = buildScenes.ToArray();
+            BuildSceneOrder.Apply();
             AssetDatabase.SaveAssets();
             Debug.Log($"Dig prototype scene built at {ScenePath}");
         }

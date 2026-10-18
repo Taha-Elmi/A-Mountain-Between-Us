@@ -81,6 +81,8 @@ namespace Farhad
             }
             else if (goal.Reached)
                 GUI.Label(new Rect(0f, 300f, width, 80f), "You reached the other side of the mountain.", large);
+
+            if (goal.FadeOut > 0f) DrawRect(new Rect(0f, 0f, width, 1080f), new Color(0f, 0f, 0f, goal.FadeOut));
         }
 
         static GUIStyle Centered(GUIStyle style) => new(style) { alignment = TextAnchor.MiddleCenter };
