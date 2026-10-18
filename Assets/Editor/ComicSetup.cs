@@ -116,9 +116,9 @@ namespace Farhad.EditorTools
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
             RefreshComics();
-            // The opening comic leads into the mountain; the closing one back to the start.
+            // The opening comic leads into the mountain; the closing one back to the main menu.
             BuildScene("Intro", "DigPrototype");
-            BuildScene("Outro", "ComicIntro");
+            BuildScene("Outro", "Menu");
             BuildSceneOrder.Apply();
             AssetDatabase.SaveAssets();
             EditorSceneManager.OpenScene($"{ScenesDir}/ComicIntro.unity");

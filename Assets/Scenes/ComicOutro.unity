@@ -547,7 +547,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   comic: {fileID: 11400000, guid: 9917364a29fba634e89832857e3f2fc8, type: 2}
-  nextScene: ComicIntro
+  nextScene: Menu
   paper: {fileID: 2126079217}
   page: {fileID: 1856459337}
   nextPage: {fileID: 95885534}

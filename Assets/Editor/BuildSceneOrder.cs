@@ -9,6 +9,7 @@ namespace Farhad.EditorTools
     {
         static readonly string[] PlayOrder =
         {
+            "Assets/Scenes/Menu.unity",
             "Assets/Scenes/ComicIntro.unity",
             "Assets/Scenes/DigPrototype.unity",
             "Assets/Scenes/ComicOutro.unity",
