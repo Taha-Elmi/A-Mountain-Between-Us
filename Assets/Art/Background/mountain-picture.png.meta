@@ -1,15 +1,15 @@
 fileFormatVersion: 2
-guid: f55aa379c302d8448873322ac22b6f66
+guid: 43425c67bfea0974fa2b66e49a7d6942
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -243972859976666463
-    second: palace_0
+      213: 1164252419838900695
+    second: mountain-picture_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
     mipMapMode: 0
-    enableMipMap: 0
+    enableMipMap: 1
     sRGBTexture: 1
     linearTexture: 0
     fadeOut: 0
@@ -37,7 +37,7 @@ TextureImporter:
   maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
-    filterMode: 1
+    filterMode: 2
     aniso: 1
     mipBias: 0
     wrapU: 1
@@ -139,13 +139,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: palace_0
+      name: mountain-picture_0
       rect:
         serializedVersion: 2
-        x: 1602
-        y: 651
-        width: 318
-        height: 238
+        x: 0
+        y: 0
+        width: 1920
+        height: 1152
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -154,8 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 1a2314af9fb3d9cf0800000000000000
-      internalID: -243972859976666463
+      spriteID: 7d9f2694861482010800000000000000
+      internalID: 1164252419838900695
       vertices: []
       indices: 
       edges: []
@@ -174,7 +174,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      palace_0: -243972859976666463
+      mountain-picture_0: 1164252419838900695
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

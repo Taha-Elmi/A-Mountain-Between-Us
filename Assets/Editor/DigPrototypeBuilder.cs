@@ -8,8 +8,9 @@ using UnityEngine.Tilemaps;
 namespace Farhad.EditorTools
 {
     // Builds the dig prototype scene, so it can be rebuilt at any time. When the artist's background
-    // layers exist (see MountainArtLayout), the level is shaped by them; otherwise a made-up mountain
-    // is generated. Rock tiles come from Assets/Art/Tiles (see Tools/process_tiles.ps1) when they
+    // layers exist (see MountainArtLayout), the level is shaped by them and its rock shows the drawn
+    // mountain, cut into squares; otherwise a made-up mountain is generated. The other tiles (and
+    // the rock without the art) come from Assets/Art/Tiles (see Tools/process_tiles.ps1) when they
     // exist, else from generated placeholders; 1 tile = 1 unit.
     // The camera shows 8.4 tiles vertically, so a tile is 128 px tall on a 1080p screen: tile art
     // should be painted at 256x256 px to stay sharp at 4K.
@@ -20,6 +21,8 @@ namespace Farhad.EditorTools
         const string TilesDir = "Assets/Tiles";
         const string PhysicsDir = "Assets/Physics";
         const string ScenePath = "Assets/Scenes/DigPrototype.unity";
+        const string AudioDir = "Assets/Audio";
+        const string MusicPath = AudioDir + "/Music/Soundtrack.mp3";
         const int PixelsPerUnit = 128;
         const float OrthographicSize = 1080f / 128f / 2f;
 
@@ -43,14 +46,30 @@ namespace Farhad.EditorTools
             var farhadSprite = MakeSprite("farhad", FarhadTexture());
             var beaconSprite = MakeSprite("goal_beacon", BeaconTexture());
 
-            var solidTile = MakeTile("RockSolid", solidSprite, Tile.ColliderType.Grid);
-            var hollowTile = MakeTile("RockHollow", solidSprite, Tile.ColliderType.Grid); // same look as solid on purpose
             // Drawn over hollow rock while it is revealed: the artist's loose stones, if they exist.
             var revealTile = MakeTile("RockHollowRevealed", TileArt("rock_hollow") ?? solidSprite, Tile.ColliderType.None);
             var wallTile = MakeTile("BackWall", wallSprite, Tile.ColliderType.None);
             var frictionless = MakeFrictionless();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            // With the background art, rock shows the mountain as drawn: each cell its own square of
+            // the picture, so a cell dug away takes its square with it. Hollow looks the same as solid
+            // on purpose.
+            MountainArtLayout layout = null;
+            TileBase solidTile, hollowTile;
+            if (MountainArtLayout.HasArt)
+            {
+                layout = MountainArtLayout.Analyze();
+                layout.PlaceLayers(new GameObject("Background").transform);
+                solidTile = MakePictureTile("MountainSolid", layout);
+                hollowTile = MakePictureTile("MountainHollow", layout);
+            }
+            else
+            {
+                solidTile = MakeTile("RockSolid", solidSprite, Tile.ColliderType.Grid);
+                hollowTile = MakeTile("RockHollow", solidSprite, Tile.ColliderType.Grid);
+            }
 
             var light = new GameObject("Global Light 2D").AddComponent<Light2D>();
             light.lightType = Light2D.LightType.Global;
@@ -69,13 +88,13 @@ namespace Farhad.EditorTools
             generator.solidTile = solidTile;
             generator.hollowTile = hollowTile;
             generator.backWallTile = wallTile;
-            if (MountainArtLayout.HasArt)
+            if (layout != null)
             {
-                var layout = MountainArtLayout.Analyze();
-                generator.Generate(layout.Shape, layout.BackWallShape, layout.Entrance, layout.Exit, layout.SpawnX);
-                layout.PlaceLayers(new GameObject("Background").transform);
-                // Rock is drawn only inside the artist's outline of the mountain.
-                foreach (var map in new[] { rock, reveal, backWall })
+                // The back wall goes only behind rock: everywhere else the backdrop shows the mountain.
+                generator.Generate(layout.Shape, layout.Shape, layout.Entrance, layout.Exit, layout.SpawnX);
+                // The back wall and the revealed stones are drawn only inside the artist's outline of
+                // the mountain; the rock's squares already show the sky where they reach past it.
+                foreach (var map in new[] { reveal, backWall })
                     map.GetComponent<TilemapRenderer>().maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
             }
             else generator.Generate();
@@ -135,6 +154,11 @@ namespace Farhad.EditorTools
             capsule.sharedMaterial = frictionless;
             farhadObject.AddComponent<AudioSource>().playOnAwake = false;
             var sounds = farhadObject.AddComponent<RockSounds>();
+            // His recorded voice; whatever is missing falls back to the synthesized placeholder.
+            sounds.callTakes = Clips("farhad_call_shirin_");
+            sounds.freshGrunts = Clips("farhad_strike_fresh_");
+            sounds.strainedGrunts = Clips("farhad_strike_strained_");
+            sounds.tiredGrunts = Clips("farhad_strike_tired_");
 
             var marker = new GameObject("Target Marker").AddComponent<SpriteRenderer>();
             marker.sprite = markerSprite;
@@ -155,6 +179,7 @@ namespace Farhad.EditorTools
 
             var call = farhadObject.AddComponent<ShirinCall>();
             call.mountain = mountain;
+            call.revealDuration = 3f;
             generator.call = call;
 
             // His glow: a copy of his sprite just behind him, drawn by the halo shader.
@@ -176,7 +201,7 @@ namespace Farhad.EditorTools
             cam.orthographic = true;
             cam.orthographicSize = OrthographicSize;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            // Shows only through gaps in the art, so it matches the night sky.
+            // The art covers the whole view; without it, a daylight sky.
             cam.backgroundColor = MountainArtLayout.HasArt ? new Color(0.13f, 0.13f, 0.15f) : new Color(0.62f, 0.66f, 0.78f);
             cameraObject.AddComponent<AudioListener>();
             var follow = cameraObject.AddComponent<CameraFollow>();
@@ -185,6 +210,15 @@ namespace Farhad.EditorTools
             follow.minBounds = new Vector2(0f, 0f);
             follow.maxBounds = new Vector2(generator.width, generator.height);
             rockfall.cameraFollow = follow;
+
+            var music = AssetDatabase.LoadAssetAtPath<AudioClip>(MusicPath);
+            if (music != null)
+            {
+                var soundtrack = new GameObject("Soundtrack", typeof(AudioSource)).AddComponent<Soundtrack>();
+                soundtrack.GetComponent<AudioSource>().playOnAwake = false;
+                soundtrack.music = music;
+            }
+            else Debug.LogWarning($"No soundtrack at {MusicPath}, so the level is built without music.");
 
             var hud = new GameObject("Prototype HUD").AddComponent<PrototypeHud>();
             hud.farhad = farhad;
@@ -196,6 +230,20 @@ namespace Farhad.EditorTools
             BuildSceneOrder.Apply();
             AssetDatabase.SaveAssets();
             Debug.Log($"Dig prototype scene built at {ScenePath}");
+        }
+
+        // The clips in Assets/Audio whose names start with prefix, in name order (take 01, 02, ...).
+        static AudioClip[] Clips(string prefix)
+        {
+            var clips = new System.Collections.Generic.List<AudioClip>();
+            foreach (var guid in AssetDatabase.FindAssets("t:AudioClip", new[] { AudioDir }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (Path.GetDirectoryName(path)!.Replace('\\', '/') != AudioDir) continue;
+                if (Path.GetFileName(path).StartsWith(prefix)) clips.Add(AssetDatabase.LoadAssetAtPath<AudioClip>(path));
+            }
+            clips.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            return clips.ToArray();
         }
 
         static Material HaloMaterial()
@@ -244,6 +292,23 @@ namespace Farhad.EditorTools
             tile.sprite = sprite;
             tile.colliderType = collider;
             tile.flags = TileFlags.None;
+            EditorUtility.SetDirty(tile);
+            return tile;
+        }
+
+        static PictureTile MakePictureTile(string name, MountainArtLayout layout)
+        {
+            string path = $"{TilesDir}/{name}.asset";
+            var tile = AssetDatabase.LoadAssetAtPath<PictureTile>(path);
+            if (tile == null)
+            {
+                tile = ScriptableObject.CreateInstance<PictureTile>();
+                AssetDatabase.CreateAsset(tile, path);
+            }
+            tile.picture = layout.Picture;
+            tile.pixelsPerCell = layout.PixelsPerCell;
+            tile.colliderType = Tile.ColliderType.Grid;
+            tile.ClearSquares();
             EditorUtility.SetDirty(tile);
             return tile;
         }
