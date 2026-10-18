@@ -155,6 +155,7 @@ namespace Farhad.EditorTools
 
             var call = farhadObject.AddComponent<ShirinCall>();
             call.mountain = mountain;
+            generator.call = call;
 
             // His glow: a copy of his sprite just behind him, drawn by the halo shader.
             if (animator != null)

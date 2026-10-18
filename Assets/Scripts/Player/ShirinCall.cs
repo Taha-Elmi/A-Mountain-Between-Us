@@ -11,9 +11,14 @@ namespace Farhad
         public MountainGrid mountain;
         public Key callKey = Key.Q;
 
-        [Min(0)] public int calls = 3;
+        // The mountain's hollow rock is laid out so these calls are enough to find the way through
+        // (see MountainGenerator), so changing them changes how the mountain is made.
+        public const int DefaultCalls = 3;
+        public const float DefaultRevealRadius = 7.5f;
+
+        [Min(0)] public int calls = DefaultCalls;
         [Tooltip("How far from Farhad's body hollow rock is revealed, in tiles.")]
-        [Min(0f)] public float revealRadius = 3f;
+        [Min(0f)] public float revealRadius = DefaultRevealRadius;
         [Tooltip("How long revealed hollow rock stays visible, in seconds.")]
         [Min(0f)] public float revealDuration = 5f;
         [Tooltip("How fast the reveal spreads out from Farhad, in tiles per second (0: all at once).")]

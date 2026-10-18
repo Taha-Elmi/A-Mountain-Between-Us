@@ -5,10 +5,13 @@ using UnityEngine.Tilemaps;
 
 namespace Farhad
 {
-    // Writes a mountain into the tilemaps: one hollow vein that runs all the way through it, hollow
-    // dead-ends that lead nowhere, and hollow pockets, in solid rock. The mountain's shape either comes
-    // from the level's background art (see MountainArtLayout) or is made up: plains on both sides
-    // of a cliff-faced block.
+    // Writes a mountain into the tilemaps: solid rock with one winding hollow way through it, hollow
+    // decoys branching off it, and lone hollow pockets (see HollowLayout). The way is planned around
+    // Farhad's calls to Shirin, so a player who remembers what each call shows can get through with
+    // them. The mountain's shape either comes from the level's background art (see MountainArtLayout)
+    // or is made up: plains on both sides of a cliff-faced block. Every time the level loads, the
+    // hollow rock is laid out anew in the same shape.
+    [DefaultExecutionOrder(-100)]
     public class MountainGenerator : MonoBehaviour
     {
         public Tilemap rockMap;
@@ -23,28 +26,52 @@ namespace Farhad
         public int groundLevel = 6;
         public int mountainStartX = 20;
         public int mountainEndX = 128;
+        [Tooltip("Where Farhad stands once he has broken out on the far side. Set when the mountain is built.")]
+        public Vector2Int exit = new(-1, -1);
 
-        [Header("Generation")]
+        [Header("Hollow rock")]
+        [Tooltip("Lay the hollow rock out anew every time the level loads. Off: keep the layout saved in the scene.")]
+        public bool randomizeOnPlay = true;
+        [Tooltip("The layout saved in the scene when the mountain is built. Each random layout is logged with its seed.")]
         public int seed = 1405;
-        [Range(0f, 1f)] public float hollowPocketThreshold = 0.8f;
-        [Min(1)] public int veinWaypoints = 4;
-        public int deadEndVeins = 10;
-        public Vector2Int deadEndLength = new(10, 26);
+        [Tooltip("Farhad's calls to Shirin: the way through is planned around how many there are and how far they reach.")]
+        public ShirinCall call;
+        [Tooltip("Tiles taken off a call's reach when planning, so the way can still be followed from a call made a little short of the ideal spot.")]
+        [Min(0f)] public float revealSlack = 0.5f;
+        [Tooltip("Rows the way through must climb and drop in all, so it winds instead of running straight across.")]
+        [Min(0)] public int minVerticalTravel = 12;
+        [Tooltip("Hollow branches off the way that look just like it but lead nowhere.")]
+        [Min(0)] public int decoys = 8;
+        [Tooltip("Moves in each decoy, shortest to longest.")]
+        public Vector2Int decoyMoves = new(3, 7);
+        [Tooltip("Lone pockets of one to three hollow cells.")]
+        [Min(0)] public int pockets = 8;
+        [Tooltip("Cells of solid rock always kept between hollow rock and the mountain's outside, except where the way goes in and comes out.")]
+        [Min(1)] public int surfaceMargin = 1;
 
         // Where Farhad's feet start, and the middle of the goal, after the last Generate.
         public Vector3 SpawnPoint { get; private set; }
         public Vector3 GoalPoint { get; private set; }
 
-        RockType[,] cells;
-        int[] tops; // per column: the first row above the highest rock
+        bool[,] shape;
+        bool[,] hollow;
 
-        // The made-up mountain: a cliff-faced block with a solid crust on top, so it can't be dug from above.
+        Vector2Int Entrance => new(mountainStartX, groundLevel);
+
+        void Awake()
+        {
+            if (!randomizeOnPlay) return;
+            int playSeed = new System.Random().Next();
+            if (Relayout(playSeed)) Debug.Log($"Mountain laid out with seed {playSeed}.", this);
+        }
+
+        // The made-up mountain: a cliff-faced block.
         [ContextMenu("Generate")]
         public void Generate()
         {
             var rng = new System.Random(seed);
             float ox = rng.Next(0, 10000), oy = rng.Next(0, 10000);
-            var shape = new bool[width, height];
+            shape = new bool[width, height];
             for (int x = 0; x < width; x++)
             {
                 bool inMountain = x >= mountainStartX && x <= mountainEndX;
@@ -52,159 +79,104 @@ namespace Farhad
                 for (int y = 0; y < top; y++) shape[x, y] = true;
             }
 
-            var entrance = new Vector2Int(mountainStartX, groundLevel);
-            var exit = new Vector2Int(mountainEndX, groundLevel);
-            Build(rng, shape, entrance, exit, crust: 3, veinRoof: 8, wallWorldEdges: true);
+            exit = new Vector2Int(mountainEndX, groundLevel);
+            LayOut(seed);
+            WriteTiles(shape, wallWorldEdges: true);
             SpawnPoint = new Vector3(6.5f, groundLevel, 0f);
             GoalPoint = new Vector3((mountainEndX + width) * 0.5f, groundLevel + 2f, 0f);
         }
 
         // The mountain drawn in the background art. shape[x, y] is true for cells that are rock, and
         // backWallShape for every cell the drawn mountain reaches into, even a little (the back wall is
-        // only seen, never touched). The vein runs from the foot of the mountain (entrance, on the
-        // ground Farhad starts on) to where it breaks out at the far side (exit, the first open cell
-        // above the rock there). Dead ends are scaled to the mountain's width, so a small mountain
-        // isn't hollowed out.
+        // only seen, never touched). The way through runs from the foot of the mountain (entrance, on
+        // the ground Farhad starts on) to where it breaks out at the far side (exit, the first open
+        // cell above the rock there).
         public void Generate(bool[,] shape, bool[,] backWallShape, Vector2Int entrance, Vector2Int exit, float spawnX)
         {
+            this.shape = shape;
             width = shape.GetLength(0);
             height = shape.GetLength(1);
             groundLevel = entrance.y;
             mountainStartX = entrance.x;
             mountainEndX = exit.x;
-            int span = exit.x - entrance.x;
-            deadEndVeins = Math.Max(1, span / 8);
-            deadEndLength = new Vector2Int(Math.Max(3, span / 5), Math.Max(5, span / 2));
+            this.exit = exit;
 
-            Build(new System.Random(seed), shape, entrance, exit, crust: 0, veinRoof: 4, wallWorldEdges: false, backWallShape);
+            LayOut(seed);
+            WriteTiles(backWallShape, wallWorldEdges: false);
             SpawnPoint = new Vector3(spawnX, entrance.y, 0f);
             GoalPoint = new Vector3(exit.x + 1.5f, exit.y + 1.5f, 0f);
         }
 
-        void Build(System.Random rng, bool[,] shape, Vector2Int entrance, Vector2Int exit,
-            int crust, int veinRoof, bool wallWorldEdges, bool[,] backWallShape = null)
+        // Lays the hollow rock out anew in the mountain already in the rock tilemap, keeping its shape.
+        public bool Relayout(int layoutSeed)
         {
-            float ox = rng.Next(0, 10000), oy = rng.Next(0, 10000);
-            cells = new RockType[width, height];
-            tops = new int[width];
-
+            shape = new bool[width, height];
             for (int x = 0; x < width; x++)
             for (int y = 0; y < height; y++)
+                shape[x, y] = rockMap.HasTile(new Vector3Int(x, y, 0));
+
+            // Scenes built before the exit was saved: the way breaks out on top of the far column.
+            if (exit.x < 0)
             {
-                if (!shape[x, y]) continue;
-                tops[x] = y + 1;
-                cells[x, y] = RockType.Solid;
+                int top = 0;
+                for (int y = 0; y < height; y++) if (shape[mountainEndX, y]) top = y + 1;
+                exit = new Vector2Int(mountainEndX, top);
             }
 
-            // Hollow pockets, kept off the floor and out of the solid crust on the mountain's top.
-            for (int x = entrance.x; x <= exit.x; x++)
-            for (int y = 2; y < tops[x] - Math.Max(crust, 1); y++)
-                if (cells[x, y] == RockType.Solid &&
-                    Mathf.PerlinNoise(ox + 200f + x * 0.2f, oy + 200f + y * 0.2f) > hollowPocketThreshold)
-                    cells[x, y] = RockType.Hollow;
-
-            var vein = CarveMainVein(rng, entrance, exit, veinRoof);
-            for (int i = 0; i < deadEndVeins; i++) CarveDeadEnd(rng, vein[rng.Next(vein.Count)], entrance.x, exit.x);
-
-            WriteTiles(backWallShape ?? shape, wallWorldEdges);
+            if (!LayOut(layoutSeed)) return false;
+            WriteRock();
+            return true;
         }
 
-        // A 3-cell-tall hollow corridor from the entrance to the exit, so the mountain can always be
-        // crossed by following hollow rock alone. It climbs and falls through random waypoints so the
-        // whole height of the mountain is used, staying veinRoof cells under the mountain's surface.
-        List<Vector2Int> CarveMainVein(System.Random rng, Vector2Int entrance, Vector2Int exit, int veinRoof)
+        bool LayOut(int layoutSeed)
         {
-            var waypoints = new List<Vector2Int>();
-            for (int i = 1; i < veinWaypoints; i++)
+            if (call == null) call = FindAnyObjectByType<ShirinCall>();
+            var settings = new HollowLayout.Settings
             {
-                int wx = entrance.x + (exit.x - entrance.x) * i / veinWaypoints;
-                int highest = Math.Max(entrance.y + 1, tops[wx] - veinRoof - 2);
-                waypoints.Add(new Vector2Int(wx, rng.Next(entrance.y, highest)));
-            }
-            waypoints.Add(exit);
+                calls = call != null ? call.calls : ShirinCall.DefaultCalls,
+                revealRadius = call != null ? call.revealRadius : ShirinCall.DefaultRevealRadius,
+                revealSlack = revealSlack,
+                minVerticalTravel = minVerticalTravel,
+                decoys = decoys,
+                decoyMoves = decoyMoves,
+                pockets = pockets,
+                surfaceMargin = surfaceMargin,
+            };
 
-            var vein = new List<Vector2Int>();
-            int y = entrance.y;
-            int next = 0;
-            for (int x = entrance.x; x <= exit.x; x++)
+            var layout = HollowLayout.Plan(shape, Entrance, exit, settings, layoutSeed);
+            if (layout == null)
             {
-                int prevY = y;
-                while (next < waypoints.Count - 1 && waypoints[next].x <= x) next++;
-                int dy = waypoints[next].y - y;
-                int dx = Math.Max(1, waypoints[next].x - x);
-
-                // Head for the waypoint, steeper the less room is left, with the odd wiggle away from it.
-                if (dy != 0 && (Math.Abs(dy) >= dx || rng.NextDouble() < 0.2 + 0.7 * Math.Abs(dy) / dx)) y += Math.Sign(dy);
-                else if (rng.NextDouble() < 0.12) y += rng.Next(2) == 0 ? 1 : -1;
-
-                // Near the exit the vein may rise to it, even if that is close to the surface.
-                int roof = Math.Max(tops[x] - veinRoof, exit.x - x <= Math.Abs(exit.y - y) + 3 ? exit.y : 3);
-                y = Mathf.Clamp(y, 3, Math.Max(3, roof));
-
-                // Cover both the old and new floor height so every step can be jumped.
-                Carve(x, Mathf.Min(prevY, y), 3 + Math.Abs(y - prevY));
-                vein.Add(new Vector2Int(x, y));
+                Debug.LogError($"No way through the mountain could be laid out from {Entrance} to {exit}, so it is all solid. " +
+                               "Check the mountain's entrance and exit.", this);
+                hollow = new bool[width, height];
+                return false;
             }
-            return vein;
-        }
-
-        // A cramped 2-cell-tall hollow branch off the main vein that goes nowhere.
-        void CarveDeadEnd(System.Random rng, Vector2Int from, int minX, int maxX)
-        {
-            int dirX = rng.Next(2) == 0 ? -1 : 1;
-            int x = from.x;
-            int y = rng.Next(2) == 0 ? from.y + 3 : from.y - 2;
-            int length = rng.Next(deadEndLength.x, deadEndLength.y);
-            for (int i = 0; i < length; i++)
-            {
-                x = Mathf.Clamp(x, minX + 1, maxX - 1);
-                y = Mathf.Clamp(y, 3, Math.Max(3, tops[x] - 5));
-                Carve(x, y, 2);
-                if (rng.NextDouble() < 0.6) x += dirX;
-                else y += rng.Next(2) == 0 ? 1 : -1;
-            }
-        }
-
-        void Carve(int x, int y, int cellsTall)
-        {
-            for (int i = 0; i < cellsTall; i++)
-            {
-                int cy = y + i;
-                if (cy < 0 || cy >= height || cells[x, cy] == RockType.Empty) continue;
-                cells[x, cy] = RockType.Hollow;
-            }
+            if (!layout.FitsCalls)
+                Debug.LogWarning($"The mountain is too big to cross with {settings.calls} calls reaching {settings.revealRadius} tiles, " +
+                                 "so the way through was laid out without planning it around them. Raise the calls or their reveal radius.", this);
+            else if (!layout.NeedsAllCalls)
+                Debug.LogWarning($"Calls reaching {settings.revealRadius} tiles show so much of the mountain that fewer than {settings.calls} " +
+                                 "are enough to cross it. Lower their reveal radius to make every call count.", this);
+            hollow = layout.Hollow;
+            return true;
         }
 
         void WriteTiles(bool[,] backWallShape, bool wallWorldEdges)
         {
-            var rockPositions = new List<Vector3Int>();
-            var rockTiles = new List<TileBase>();
-            var wallPositions = new List<Vector3Int>();
-
-            for (int x = 0; x < width; x++)
-            for (int y = 0; y < height; y++)
-            {
-                var pos = new Vector3Int(x, y, 0);
-                if (cells[x, y] != RockType.Empty)
-                {
-                    rockPositions.Add(pos);
-                    rockTiles.Add(TileFor(cells[x, y]));
-                }
-                if (backWallShape[x, y]) wallPositions.Add(pos);
-            }
+            rockMap.ClearAllTiles();
+            backWallMap.ClearAllTiles();
+            WriteRock();
 
             // Keep the world edges walled above the mountain too.
             if (wallWorldEdges)
                 for (int y = height; y < height + 8; y++)
                 foreach (int x in new[] { 0, width - 1 })
-                {
-                    rockPositions.Add(new Vector3Int(x, y, 0));
-                    rockTiles.Add(solidTile);
-                }
+                    rockMap.SetTile(new Vector3Int(x, y, 0), solidTile);
 
-            rockMap.ClearAllTiles();
-            backWallMap.ClearAllTiles();
-            rockMap.SetTiles(rockPositions.ToArray(), rockTiles.ToArray());
+            var wallPositions = new List<Vector3Int>();
+            for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+                if (backWallShape[x, y]) wallPositions.Add(new Vector3Int(x, y, 0));
             backWallMap.SetTiles(wallPositions.ToArray(), Fill(backWallTile, wallPositions.Count));
 
 #if UNITY_EDITOR
@@ -212,7 +184,19 @@ namespace Farhad
 #endif
         }
 
-        TileBase TileFor(RockType rock) => rock == RockType.Hollow ? hollowTile : solidTile;
+        void WriteRock()
+        {
+            var positions = new List<Vector3Int>();
+            var tiles = new List<TileBase>();
+            for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+            {
+                if (!shape[x, y]) continue;
+                positions.Add(new Vector3Int(x, y, 0));
+                tiles.Add(hollow[x, y] ? hollowTile : solidTile);
+            }
+            rockMap.SetTiles(positions.ToArray(), tiles.ToArray());
+        }
 
         static TileBase[] Fill(TileBase tile, int count)
         {
