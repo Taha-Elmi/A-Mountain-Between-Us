@@ -1,0 +1,74 @@
+# The words of the Intro comic, in Persian (fa, the default) and English (en).
+# One block per page, in the order the pages play (panel1.jpg is page 1). The lines of a page
+# appear one per click, in the order written here.
+#
+# Each line starts with who says it in [brackets], then how its box looks and where it sits:
+#   caption        a square box (narration, or Farhad telling the story); [Narration] is one anyway
+#   speech         a rounded bubble (everyone else, unless told caption)
+#   at X Y         the box's centre, in percent of the page from its top-left corner
+#   width W        the widest the box may grow, in percent of the page's width
+#   tail X Y       a bubble's tail points here (percent of the page, as above)
+# then its text in both languages. Farhad > Preview Comic Words draws every page with its words
+# into ComicPreviews/ to check the layout.
+#
+# Speakers:
+#   [Narration]  نریشن
+#   [Farhad]     فرهاد
+#   [Officer]    مأمور
+#   [Khosrow]    خسرو
+
+== Page 1 (panel1.jpg) ==
+
+[Narration] caption at 22 16 width 30
+fa: می‌گویند این کوهستانِ سرسخت، نفوذناپذیر است... اما آن‌ها از عزمِ پشتِ این تیشه بی‌خبرند.
+en: They say this stubborn mountain cannot be breached... but they know nothing of the resolve behind this pickaxe.
+
+[Farhad] speech at 79 38 width 26 tail 62 56
+fa: باید این صخره‌های بی‌رحم را بشکنم. برای او...
+en: I must break these merciless rocks. For her...
+
+== Page 2 (panel2.jpg) ==
+
+[Farhad] caption at 24 13 width 30
+fa: همه چیز از آن شب مهتابی آغاز شد... وقتی برای نخستین بار او را دیدم: شیرین.
+en: It all began on that moonlit night... when I first saw her: Shirin.
+
+[Farhad] caption at 76 87 width 30
+fa: یک نگاه کافی بود تا تمامِ جهانم دگرگون شود.
+en: A single glance was enough to change my whole world.
+
+== Page 3 (panel3.jpg) ==
+
+[Farhad] caption at 83 50 width 30
+fa: اما عشقِ یک سنگ‌تراش به بانوی قصر، جرمی بی‌سرانجام بود. شب‌ها با خیال او بی‌قرار بودم و روزها آواره...
+en: But a stonecutter's love for the lady of the palace was a crime with no hope of an end. By night I was restless with dreams of her, and by day I wandered...
+
+== Page 4 (panel4.jpg) ==
+
+[Narration] caption at 27 14 width 32
+fa: طولی نکشید که آوازه این شیدایی و رسوایی، به دربارِ شاه رسید.
+en: Before long, word of this madness and disgrace reached the king's court.
+
+[Officer] speech at 82 17 width 28 tail 68 26
+fa: قبلهٔ عالم... سنگ‌تراشی بی‌نام‌ونشان، دلباخته و مجنونِ شیرینِ شما شده است!
+en: Pivot of the Universe... a stonecutter of no name has lost his heart, and his mind, to your Shirin!
+
+== Page 5 (panel5.jpg) ==
+
+[Khosrow] speech at 54 13 width 32 tail 35 23
+fa: شنیده‌ام مدعیِ عشق شیرینی! اگر راست می‌گویی، کوه بیستون را از میان بردار... آن‌وقت شیرین مالِ تو!
+en: I hear you claim to love Shirin! If you speak the truth, tear down Mount Bisotun... and then Shirin is yours!
+
+[Farhad] speech at 85 42 width 26 tail 70 36
+fa: اگر بهای وصلِ شیرین، کندنِ کوه باشد... صخره‌ها را با ناخن‌هایم نیز خواهم تراشید!
+en: If the price of Shirin is to dig through a mountain... I will carve away its rocks with my bare fingernails!
+
+== Page 6 (panel6.jpg) ==
+
+[Farhad] caption at 22 18 width 30
+fa: خسرو می‌خواست با این شرطِ محال، مرا از سر راه بردارد... اما او نمی‌داند که عشق، صخره‌ها را هم نرم می‌کند.
+en: With this impossible demand, Khosrow meant to be rid of me... but he does not know that love softens even stone.
+
+[Farhad] caption at 78 82 width 30
+fa: حالا، وقت کار است. هر ضربهٔ تیشه، فریادِ عشق من خواهد بود...
+en: Now it is time to work. Every blow of my pickaxe will be a cry of my love...

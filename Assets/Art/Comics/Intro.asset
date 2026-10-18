@@ -14,7 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   paper: {r: 1, g: 1, b: 1, a: 1}
   pages:
-  - image: {fileID: 21300000, guid: 0f1ee6236b4a53546a2aeabe1ce09a35, type: 3}
+  - image: {fileID: 21300000, guid: 5422c7e22f6636d49b5379e601413885, type: 3}
     autoAdvance: 0
-  - image: {fileID: 21300000, guid: 6ecd5b5f6f08f6448abb0b890f76a386, type: 3}
+  - image: {fileID: 21300000, guid: afffad790d702d24d931422783326ee9, type: 3}
     autoAdvance: 0
+  - image: {fileID: 21300000, guid: 30405c64a99cdb645a9773073c825fa3, type: 3}
+    autoAdvance: 0
+  - image: {fileID: 21300000, guid: 8d376ba97d4b9b44e9fa728d6ab89a71, type: 3}
+    autoAdvance: 0
+  - image: {fileID: 21300000, guid: 45609ebbbf24e314e8a5428253c609ec, type: 3}
+    autoAdvance: 0
+  - image: {fileID: 21300000, guid: d9b6fbbda2b984641b2b688f033a7ddf, type: 3}
+    autoAdvance: 0
+  script: {fileID: 4900000, guid: 91a14437a5382e742bc6be6249ab9071, type: 3}

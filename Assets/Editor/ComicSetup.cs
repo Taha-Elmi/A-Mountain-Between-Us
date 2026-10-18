@@ -1,9 +1,13 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace Farhad.EditorTools
 {
@@ -14,11 +18,19 @@ namespace Farhad.EditorTools
     //
     // Page spec: one 16:9 image per page, the whole screen as the artist wants it seen (frame and
     // white margin included), ideally 3840x2160 so it stays sharp at 4K; 1920x1080 works too.
-    // Farhad > Build Comic Scenes makes the ComicIntro and ComicOutro scenes that play them.
+    // The words go in Assets/Art/Comics/<folder> Script.txt (format in ComicScript); saving it
+    // checks it and reports mistakes in the Console.
+    // Farhad > Build Comic Scenes makes the ComicIntro and ComicOutro scenes that play them;
+    // Farhad > Preview Comic Words draws every page with its words, in both languages, as
+    // pictures in ComicPreviews/ (outside Assets) to check the layout without playing.
     public class ComicSetup : AssetPostprocessor
     {
         public const string ComicsDir = "Assets/Art/Comics";
         const string ScenesDir = "Assets/Scenes";
+        const string ScriptSuffix = " Script.txt";
+        const string PersianFontPath = "Assets/Art/Fonts/Vazirmatn-Regular.ttf";
+        const string EnglishFontPath = "Assets/Art/Fonts/Vazirmatn-Regular.ttf";
+        const string PreviewDir = "ComicPreviews";
         static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg", ".psd", ".tga", ".tif", ".tiff" };
 
         // A page image: any image in a folder under ComicsDir.
@@ -51,9 +63,13 @@ namespace Farhad.EditorTools
             importer.SetTextureSettings(settings);
         }
 
+        // A comic's script: "<folder> Script.txt" next to its folder.
+        static bool IsScript(string path) =>
+            path.StartsWith(ComicsDir + "/") && path.EndsWith(ScriptSuffix) && !path.Substring(ComicsDir.Length + 1).Contains('/');
+
         static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
-            if (!imported.Concat(deleted).Concat(moved).Concat(movedFrom).Any(IsPage)) return;
+            if (!imported.Concat(deleted).Concat(moved).Concat(movedFrom).Any(p => IsPage(p) || IsScript(p))) return;
             // Creating assets in the middle of an import is unsafe; refill once it's done.
             EditorApplication.delayCall -= RefreshComics;
             EditorApplication.delayCall += RefreshComics;
@@ -92,17 +108,47 @@ namespace Farhad.EditorTools
                 if (sprite == null) Debug.LogWarning($"Comic page {p} isn't imported as a Sprite: set its Texture Type to Sprite.");
                 return sprite;
             }).Where(s => s != null).ToList();
-            if (sprites.SequenceEqual(comic.pages.Select(p => p.image))) return comic;
 
-            // Keep the settings of pages that were already there.
-            var old = comic.pages.Where(p => p.image != null).GroupBy(p => p.image).ToDictionary(g => g.Key, g => g.First());
-            comic.pages = sprites
-                .Select(s => old.TryGetValue(s, out var page) ? page : new ComicSequence.Page { image = s })
-                .ToList();
-            EditorUtility.SetDirty(comic);
-            AssetDatabase.SaveAssetIfDirty(comic);
-            Debug.Log($"Comic {name}: {comic.pages.Count} page{(comic.pages.Count == 1 ? "" : "s")} ({string.Join(", ", images.Select(Path.GetFileName))})", comic);
+            var script = AssetDatabase.LoadAssetAtPath<TextAsset>(folder + ScriptSuffix);
+            bool pagesChanged = !sprites.SequenceEqual(comic.pages.Select(p => p.image));
+            if (pagesChanged)
+            {
+                // Keep the settings of pages that were already there.
+                var old = comic.pages.Where(p => p.image != null).GroupBy(p => p.image).ToDictionary(g => g.Key, g => g.First());
+                comic.pages = sprites
+                    .Select(s => old.TryGetValue(s, out var page) ? page : new ComicSequence.Page { image = s })
+                    .ToList();
+                Debug.Log($"Comic {name}: {comic.pages.Count} page{(comic.pages.Count == 1 ? "" : "s")} ({string.Join(", ", images.Select(Path.GetFileName))})", comic);
+            }
+            if (pagesChanged || comic.script != script)
+            {
+                comic.script = script;
+                EditorUtility.SetDirty(comic);
+                AssetDatabase.SaveAssetIfDirty(comic);
+            }
+            CheckScript(comic, name);
             return comic;
+        }
+
+        // Reports mistakes in a comic's script: rows it can't read, missing translations, and
+        // words for pages that don't exist.
+        static void CheckScript(ComicSequence comic, string name)
+        {
+            if (comic.script == null) return;
+            var problems = new List<string>();
+            var pages = ComicScript.Parse(comic.script.text, problems);
+            for (int i = 0; i < pages.Count; i++)
+            {
+                if (i >= comic.pages.Count && pages[i].Count > 0)
+                    problems.Add($"Page {i + 1} has words but the comic has only {comic.pages.Count} page{(comic.pages.Count == 1 ? "" : "s")}.");
+                foreach (var line in pages[i])
+                {
+                    if (string.IsNullOrEmpty(line.persian)) problems.Add($"Page {i + 1}, [{line.speaker}]: no Persian (fa:) text.");
+                    if (string.IsNullOrEmpty(line.english)) problems.Add($"Page {i + 1}, [{line.speaker}]: no English (en:) text.");
+                }
+            }
+            if (problems.Count > 0)
+                Debug.LogWarning($"Comic {name} script ({AssetDatabase.GetAssetPath(comic.script)}):\n" + string.Join("\n", problems), comic.script);
         }
 
         [MenuItem("Farhad/Build Comic Scenes")]
@@ -144,7 +190,8 @@ namespace Farhad.EditorTools
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight = 1f;
 
-            // Back to front: the paper, the page, the next page fading in over it, the hint, black.
+            // Back to front: the paper, the page, the next page fading in over it, the words, the
+            // hint, black.
             var player = canvasObject.AddComponent<ComicPlayer>();
             player.comic = comic;
             player.nextScene = nextScene;
@@ -155,13 +202,16 @@ namespace Farhad.EditorTools
             player.nextPage = FullScreenImage(canvasObject.transform, "Next Page", Color.white);
             player.nextPage.preserveAspect = true;
 
+            player.lines = MakeLines(canvasObject.transform);
+            player.lines.gameObject.AddComponent<CanvasGroup>();
+
             var hint = new GameObject("Hint", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
             hint.transform.SetParent(canvasObject.transform, false);
             var rect = hint.rectTransform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
             rect.anchoredPosition = new Vector2(-48f, 20f);
             rect.sizeDelta = new Vector2(600f, 40f);
-            hint.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            hint.font = player.lines.englishFont;
             hint.fontSize = 24;
             hint.alignment = TextAnchor.LowerRight;
             hint.color = new Color(0.4f, 0.4f, 0.4f);
@@ -174,6 +224,93 @@ namespace Farhad.EditorTools
             string path = $"{ScenesDir}/Comic{name}.unity";
             EditorSceneManager.SaveScene(scene, path);
             Debug.Log($"Comic scene built at {path} ({comic.pages.Count} page{(comic.pages.Count == 1 ? "" : "s")}, then {nextScene})");
+        }
+
+        static ComicLines MakeLines(Transform parent)
+        {
+            var lines = new GameObject("Words", typeof(RectTransform)).AddComponent<ComicLines>();
+            lines.transform.SetParent(parent, false);
+            lines.persianFont = AssetDatabase.LoadAssetAtPath<Font>(PersianFontPath);
+            lines.englishFont = AssetDatabase.LoadAssetAtPath<Font>(EnglishFontPath);
+            if (lines.persianFont == null || lines.englishFont == null)
+                Debug.LogError($"Comic font missing: expected {PersianFontPath} and {EnglishFontPath}.");
+            return lines;
+        }
+
+        [MenuItem("Farhad/Preview Comic Words")]
+        public static void PreviewWords()
+        {
+            RefreshComics();
+            Directory.CreateDirectory(PreviewDir);
+            int count = 0;
+            foreach (string folder in AssetDatabase.GetSubFolders(ComicsDir))
+            {
+                string name = Path.GetFileName(folder);
+                var comic = AssetDatabase.LoadAssetAtPath<ComicSequence>($"{ComicsDir}/{name}.asset");
+                if (comic == null) continue;
+                var words = comic.ReadLines();
+                for (int i = 0; i < comic.pages.Count; i++)
+                    foreach (Lang lang in Enum.GetValues(typeof(Lang)))
+                    {
+                        RenderPreview(comic.paper, comic.pages[i].image, words[i], lang, $"{PreviewDir}/{name}_{i + 1:00}_{lang}.png");
+                        count++;
+                    }
+            }
+            Debug.Log($"Drew {count} comic page previews in {Path.GetFullPath(PreviewDir)}");
+        }
+
+        // Draws one page with all its words shown, 1920x1080, in a scene of its own.
+        static void RenderPreview(Color paper, Sprite image, List<ComicLine> words, Lang lang, string path)
+        {
+            const int width = 1920, height = 1080;
+            var scene = EditorSceneManager.NewPreviewScene();
+            var target = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
+            try
+            {
+                var cameraObject = new GameObject("Camera");
+                SceneManager.MoveGameObjectToScene(cameraObject, scene);
+                var cam = cameraObject.AddComponent<Camera>();
+                cam.scene = scene;
+                cam.orthographic = true;
+                cam.orthographicSize = height * 0.5f;
+                cam.transform.position = new Vector3(0f, 0f, -10f);
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = paper;
+                cam.targetTexture = target;
+
+                var canvasObject = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas));
+                SceneManager.MoveGameObjectToScene(canvasObject, scene);
+                var canvas = canvasObject.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+                canvas.worldCamera = cam;
+                ((RectTransform)canvasObject.transform).sizeDelta = new Vector2(width, height);
+
+                var pageImage = FullScreenImage(canvasObject.transform, "Page", Color.white);
+                pageImage.sprite = image;
+                pageImage.preserveAspect = true;
+                var lines = MakeLines(canvasObject.transform);
+                float aspect = image != null ? image.rect.width / image.rect.height : 16f / 9f;
+                lines.Show(words, lang, aspect);
+                for (int i = 0; i < lines.Count; i++) lines.SetAlpha(i, 1f);
+
+                Canvas.ForceUpdateCanvases();
+                cam.Render();
+
+                var previous = RenderTexture.active;
+                RenderTexture.active = target;
+                var picture = new Texture2D(width, height, TextureFormat.RGB24, false);
+                picture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                picture.Apply();
+                RenderTexture.active = previous;
+                File.WriteAllBytes(path, picture.EncodeToPNG());
+                Object.DestroyImmediate(picture);
+                lines.Clear();
+            }
+            finally
+            {
+                RenderTexture.ReleaseTemporary(target);
+                EditorSceneManager.ClosePreviewScene(scene);
+            }
         }
 
         static Image FullScreenImage(Transform parent, string name, Color color)

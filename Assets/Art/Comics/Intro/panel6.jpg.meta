@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 6ecd5b5f6f08f6448abb0b890f76a386
+guid: d9b6fbbda2b984641b2b688f033a7ddf
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -3667080355889063928
-    second: 02_sample_tent_0
+      213: 8626065988401896596
+    second: panel6_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -139,13 +139,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: 02_sample_tent_0
+      name: panel6_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 3840
-        height: 2160
+        width: 1920
+        height: 1080
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -154,8 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 8085b6868d9eb1dc0800000000000000
-      internalID: -3667080355889063928
+      spriteID: 49c16c74051f5b770800000000000000
+      internalID: 8626065988401896596
       vertices: []
       indices: 
       edges: []
