@@ -18,8 +18,8 @@ namespace Farhad.EditorTools
     //
     // Scale: the picture spans LevelWidth tiles across. Exported at 3840x2160 that is 128 px per tile,
     // the same as a tile on a 1080p screen with the camera zoomed in 2x, so the art is pixel-sharp.
-    // The art is shifted up or down by whole pixels so the drawn ground line on the left lies as near
-    // a tile edge as it can.
+    // The art is shifted up or down by whole pixels so the drawn ground line where Farhad starts lies
+    // as near a tile edge as it can, and his feet meet it.
     public class MountainArtLayout
     {
         public const string SourceDir = "ArtSource/Background";
@@ -63,9 +63,11 @@ namespace Farhad.EditorTools
             float px = layout.PixelsPerTile;
             var inside = MountainPixels(mountain, scenery, w, h);
 
-            // The ground line: how high the ground reaches on the far left, where it is flat.
+            // The ground line: how high the ground reaches under Farhad where he starts.
             var heights = new List<int>();
-            for (int x = 0; x < w * 0.15f; x++)
+            int spawnLeft = Mathf.Max(0, Mathf.FloorToInt((layout.SpawnX - 0.5f) * px));
+            int spawnRight = Mathf.Min(w, Mathf.CeilToInt((layout.SpawnX + 0.5f) * px));
+            for (int x = spawnLeft; x < spawnRight; x++)
             {
                 int r = 0;
                 while (r < h && inside[r * w + x]) r++;

@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 
 namespace Farhad
 {
@@ -36,8 +35,6 @@ namespace Farhad
         // which swings up, out or down by how far it goes), and he can't move or swing again until
         // the pickaxe is back.
         [Header("Working the rock")]
-        [Tooltip("When he grunts with the effort: as the pickaxe starts going up (frame 4 of the drawn animation).")]
-        public float strikeGruntTime = 0.25f;
         public StrikeTiming strikeUp = new() { impactTime = 0.33f, duration = 0.67f };
         public StrikeTiming strikeSide = new() { impactTime = 0.58f, duration = 1.04f };
         public StrikeTiming strikeDown = new() { impactTime = 0.67f, duration = 1.17f };
@@ -65,8 +62,6 @@ namespace Farhad
         float swingEnd;
         float swingImpact;
         bool swingLanded = true;
-        float swingGrunt;
-        bool swingGrunted = true;
         Vector3Int swingCell;
         float lastStrainTime;
         float deathTime;
@@ -84,21 +79,15 @@ namespace Farhad
         {
             var kb = Keyboard.current;
             var mouse = Mouse.current;
-            if (kb == null || mouse == null) return;
+            if (kb == null || mouse == null || PauseMenu.Paused) return;
 
             if (IsDead)
             {
-                if (kb.rKey.wasPressedThisFrame && Time.time - deathTime > 1f)
-                    SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                if (kb.rKey.wasPressedThisFrame && Time.time - deathTime > 1f) DigRun.Retry();
                 return;
             }
 
             moveInput = 0f;
-            if (!swingGrunted && Time.time >= swingGrunt)
-            {
-                swingGrunted = true;
-                sounds.PlayGrunt();
-            }
             if (!swingLanded && Time.time >= swingImpact) LandSwing();
             if (IsSwinging)
             {
@@ -174,8 +163,6 @@ namespace Farhad
             swingImpact = Time.time + timing.impactTime;
             swingEnd = Time.time + timing.duration;
             swingLanded = false;
-            swingGrunt = Time.time + strikeGruntTime;
-            swingGrunted = false;
             moveInput = 0f;
             if (animator != null) animator.SetTrigger(StrikeIds[(int)direction]);
         }
@@ -209,6 +196,7 @@ namespace Farhad
         {
             IsDead = true;
             deathTime = Time.time;
+            DigRun.RockFell();
             moveInput = 0f;
             rb.linearVelocity = Vector2.zero;
             rb.simulated = false;

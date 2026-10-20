@@ -5,8 +5,10 @@
 # then in Unity: Farhad > Build Menu Scene.
 #
 #   menu.jpg   -> Assets/Art/Menu/menu.jpg   - the 16:9 background, copied as is
-#   button.png -> Assets/Art/Menu/button.png - the stone slab every button is drawn on, cut out of
-#                                              its transparent canvas (with a few pixels to spare)
+#   button.png    -> Assets/Art/Menu/button.png    - the stone slab every button is drawn on, cut out
+#                                                    of its transparent canvas (with a few pixels to spare)
+#   game_name.png -> Assets/Art/Menu/game_name.png - the game's name, for the top left corner, cut
+#                                                    out the same way
 
 param(
     [string]$Source = "ArtSource/Menu",
@@ -55,15 +57,21 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 Copy-Item (Join-Path $root "$Source/menu.jpg") (Join-Path $outDir "menu.jpg") -Force
 Write-Host "menu.jpg copied"
 
-$src = New-Object System.Drawing.Bitmap (Join-Path $root "$Source/button.png")
-try {
-    $box = [MenuFix]::FindDrawing($src)
-    $box = [System.Drawing.Rectangle]::FromLTRB(
-        [Math]::Max(0, $box.Left - $Margin), [Math]::Max(0, $box.Top - $Margin),
-        [Math]::Min($src.Width, $box.Right + $Margin), [Math]::Min($src.Height, $box.Bottom + $Margin))
-    $dst = $src.Clone($box, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    try { $dst.Save((Join-Path $outDir "button.png"), [System.Drawing.Imaging.ImageFormat]::Png) }
-    finally { $dst.Dispose() }
-    Write-Host "button.png cut to $($box.Width)x$($box.Height) at ($($box.X), $($box.Y))"
+# Cuts a drawing out of its transparent canvas, with a few pixels to spare.
+function Save-Cutout([string]$name) {
+    $src = New-Object System.Drawing.Bitmap (Join-Path $root "$Source/$name")
+    try {
+        $box = [MenuFix]::FindDrawing($src)
+        $box = [System.Drawing.Rectangle]::FromLTRB(
+            [Math]::Max(0, $box.Left - $Margin), [Math]::Max(0, $box.Top - $Margin),
+            [Math]::Min($src.Width, $box.Right + $Margin), [Math]::Min($src.Height, $box.Bottom + $Margin))
+        $dst = $src.Clone($box, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        try { $dst.Save((Join-Path $outDir $name), [System.Drawing.Imaging.ImageFormat]::Png) }
+        finally { $dst.Dispose() }
+        Write-Host "$name cut to $($box.Width)x$($box.Height) at ($($box.X), $($box.Y))"
+    }
+    finally { $src.Dispose() }
 }
-finally { $src.Dispose() }
+
+Save-Cutout "button.png"
+Save-Cutout "game_name.png"

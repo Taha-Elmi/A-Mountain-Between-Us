@@ -3,15 +3,15 @@ using UnityEngine.SceneManagement;
 
 namespace Farhad
 {
-    // The far side of the mountain. Reaching it ends the level: a moment later the screen fades to
-    // black and the closing comic plays.
+    // The far side of the mountain. Reaching it ends the level: the screen fades to
+    // black and the closing comic plays. The run's rockfalls and time go into the Records.
     [RequireComponent(typeof(Collider2D))]
     public class GoalZone : MonoBehaviour
     {
         [Tooltip("Loaded once Farhad reaches the goal. Empty stays in the level.")]
         public string nextScene = "ComicOutro";
         [Tooltip("Seconds from reaching the goal to the next scene; the last second fades to black.")]
-        public float nextSceneDelay = 3f;
+        public float nextSceneDelay = 1f;
 
         const float FadeSeconds = 1f;
 
@@ -28,6 +28,7 @@ namespace Farhad
             if (Reached || other.GetComponent<FarhadController>() == null) return;
             Reached = true;
             reachedTime = Time.time;
+            DigRun.Finish();
             if (!string.IsNullOrEmpty(nextScene)) Invoke(nameof(LoadNextScene), nextSceneDelay);
         }
 

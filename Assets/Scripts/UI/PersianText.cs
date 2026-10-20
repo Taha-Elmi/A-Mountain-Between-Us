@@ -6,7 +6,7 @@ namespace Farhad
     // Unity's UI Text draws characters one by one, left to right, and doesn't join Arabic-script
     // letters. Shape swaps each Persian letter for its joined form (the Unicode presentation forms
     // the font carries), and Visual turns one finished line into left-to-right drawing order. Made
-    // for Persian sentences; runs of Latin letters or digits inside them would come out reversed.
+    // for Persian sentences, with the odd Latin word or number inside them.
     public static class PersianText
     {
         const char Zwnj = '‌'; // the half-space: keeps a word's parts apart without a space
@@ -123,17 +123,53 @@ namespace Farhad
 
         // One shaped line in drawing order: the last letter first, each letter keeping its marks.
         // A mark goes just before its letter: the font draws marks to the right of where they
-        // stand, which lands them on the letter after them.
+        // stand, which lands them on the letter after them. Runs of Latin letters and digits
+        // (a key's name, a number) keep their own left-to-right order, along with the spaces and
+        // signs inside them ("A / D", "3.5 / 10").
         public static string Visual(string line)
         {
             var clusters = new List<string>(line.Length);
+            var leftToRight = new List<bool>(line.Length);
+            int lastStrong = -1;
             foreach (char c in line)
             {
-                if (IsMark(c) && clusters.Count > 0) clusters[^1] = c + clusters[^1];
-                else clusters.Add(Mirrors.TryGetValue(c, out char m) ? m.ToString() : c.ToString());
+                if (IsMark(c) && clusters.Count > 0)
+                {
+                    clusters[^1] = c + clusters[^1];
+                    continue;
+                }
+                bool ltr = IsLeftToRight(c);
+                if (ltr && lastStrong >= 0 && leftToRight[lastStrong])
+                    for (int k = lastStrong + 1; k < clusters.Count; k++) leftToRight[k] = true;
+                if (ltr || IsRightToLeft(c)) lastStrong = clusters.Count;
+                clusters.Add(c.ToString());
+                leftToRight.Add(ltr);
             }
-            clusters.Reverse();
-            return string.Concat(clusters);
+
+            var drawn = new StringBuilder(line.Length);
+            for (int end = clusters.Count; end > 0;)
+            {
+                int start = end - 1;
+                if (leftToRight[start])
+                {
+                    while (start > 0 && leftToRight[start - 1]) start--;
+                    for (int k = start; k < end; k++) drawn.Append(clusters[k]);
+                }
+                else
+                {
+                    string cluster = clusters[start];
+                    drawn.Append(cluster.Length == 1 && Mirrors.TryGetValue(cluster[0], out char m) ? m.ToString() : cluster);
+                }
+                end = start;
+            }
+            return drawn.ToString();
         }
+
+        static bool IsRightToLeft(char c) =>
+            c >= '؀' && c <= 'ۿ' && !IsPersianDigit(c) || c >= 'ﭐ' && c <= '﷿' || c >= 'ﹰ' && c <= '﻿';
+
+        static bool IsLeftToRight(char c) => IsPersianDigit(c) || char.IsLetterOrDigit(c) && !IsRightToLeft(c);
+
+        static bool IsPersianDigit(char c) => c >= '۰' && c <= '۹' || c >= '٠' && c <= '٩';
     }
 }

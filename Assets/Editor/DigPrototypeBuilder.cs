@@ -2,8 +2,11 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Tilemaps;
+using UnityEngine.UI;
 
 namespace Farhad.EditorTools
 {
@@ -23,6 +26,8 @@ namespace Farhad.EditorTools
         const string ScenePath = "Assets/Scenes/DigPrototype.unity";
         const string AudioDir = "Assets/Audio";
         const string MusicPath = AudioDir + "/Music/Soundtrack.mp3";
+        const string PersianFontPath = "Assets/Art/Fonts/Vazirmatn-Regular.ttf";
+        const string ShirinIconPath = "Assets/Art/UI/Shirin.png";
         const int PixelsPerUnit = 128;
         const float OrthographicSize = 1080f / 128f / 2f;
 
@@ -45,6 +50,9 @@ namespace Farhad.EditorTools
             var markerSprite = MakeSprite("target_marker", MarkerTexture());
             var farhadSprite = MakeSprite("farhad", FarhadTexture());
             var beaconSprite = MakeSprite("goal_beacon", BeaconTexture());
+            var keySprite = MakeSprite("key_cap", KeyCapTexture(), new Vector4(20f, 24f, 20f, 20f));
+            var mouseSprite = MakeSprite("mouse_left_click", MouseTexture(false));
+            var scrollSprite = MakeSprite("mouse_scroll_down", MouseTexture(true));
 
             // Drawn over hollow rock while it is revealed: the artist's loose stones, if they exist.
             var revealTile = MakeTile("RockHollowRevealed", TileArt("rock_hollow") ?? solidSprite, Tile.ColliderType.None);
@@ -129,8 +137,9 @@ namespace Farhad.EditorTools
             var farhadObject = new GameObject("Farhad");
             farhadObject.transform.position = generator.SpawnPoint + new Vector3(0f, 0.9f, 0f); // capsule is 1.75 tall, centered
 
-            // The drawn art (pivot at his feet) sits on a child at the bottom of the capsule; without
-            // the art, the generated placeholder (pivot at its center) sits on Farhad himself.
+            // The drawn art (pivot at his feet) sits on a child at the bottom of the capsule, lowered by
+            // the gap physics keeps between colliders so his feet touch the ground; without the art,
+            // the generated placeholder (pivot at its center) sits on Farhad himself.
             var body = new GameObject("Sprite").AddComponent<SpriteRenderer>();
             body.transform.SetParent(farhadObject.transform, false);
             body.sortingOrder = 10;
@@ -138,7 +147,7 @@ namespace Farhad.EditorTools
             if (FarhadArtSetup.HasArt)
             {
                 var controller = FarhadArtSetup.Build();
-                body.transform.localPosition = new Vector3(0f, -0.875f, 0f);
+                body.transform.localPosition = new Vector3(0f, -0.875f - Physics2D.defaultContactOffset, 0f);
                 body.sprite = FarhadArtSetup.IdleSprite;
                 animator = body.gameObject.AddComponent<Animator>();
                 animator.runtimeAnimatorController = controller;
@@ -156,9 +165,6 @@ namespace Farhad.EditorTools
             var sounds = farhadObject.AddComponent<RockSounds>();
             // His recorded voice; whatever is missing falls back to the synthesized placeholder.
             sounds.callTakes = Clips("farhad_call_shirin_");
-            sounds.freshGrunts = Clips("farhad_strike_fresh_");
-            sounds.strainedGrunts = Clips("farhad_strike_strained_");
-            sounds.tiredGrunts = Clips("farhad_strike_tired_");
 
             var marker = new GameObject("Target Marker").AddComponent<SpriteRenderer>();
             marker.sprite = markerSprite;
@@ -226,11 +232,86 @@ namespace Farhad.EditorTools
             hud.call = call;
             hud.mountain = mountain;
             hud.goal = goal;
+            hud.persianFont = AssetDatabase.LoadAssetAtPath<Font>(PersianFontPath);
+            hud.shirinIcon = IconArt(ShirinIconPath);
+
+            // The controls and rules, in the sky just over his head where he starts (the sign
+            // places itself there when the level begins).
+            var signObject = new GameObject("Tutorial Sign", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            var signCanvas = signObject.GetComponent<Canvas>();
+            signCanvas.renderMode = RenderMode.WorldSpace;
+            signCanvas.worldCamera = cam;
+            signCanvas.sortingOrder = 30;
+            signObject.GetComponent<CanvasScaler>().dynamicPixelsPerUnit = 2f; // sharp past 1080p
+            var signRect = (RectTransform)signObject.transform;
+            signRect.pivot = Vector2.zero;
+            signRect.localScale = Vector3.one / PixelsPerUnit;
+            var sign = signObject.AddComponent<TutorialSign>();
+            sign.call = call;
+            sign.farhad = farhadObject.transform;
+            sign.font = hud.persianFont; // Vazirmatn has the Latin letters too
+            sign.keySprite = keySprite;
+            sign.mouseSprite = mouseSprite;
+            sign.scrollSprite = scrollSprite;
+
+            MakePauseMenu();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             BuildSceneOrder.Apply();
             AssetDatabase.SaveAssets();
             Debug.Log($"Dig prototype scene built at {ScenePath}");
+        }
+
+        // Escape's pause menu: the main menu's stones, Resume and Back to the menu, in the middle of
+        // the darkened screen.
+        static void MakePauseMenu()
+        {
+            var stone = MenuSetup.ImportSprite(MenuSetup.ButtonPath);
+            if (stone == null || !MenuSetup.LoadFonts())
+            {
+                Debug.LogWarning("No menu art or font, so the level is built without a pause menu.");
+                return;
+            }
+
+            var events = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+            // A new module already has the default UI actions; assigning them again can throw.
+            var module = events.GetComponent<InputSystemUIInputModule>();
+            if (module.actionsAsset == null) module.AssignDefaultActions();
+
+            var canvasObject = new GameObject("Pause Menu", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 100;
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 1f;
+            var pause = canvasObject.AddComponent<PauseMenu>();
+
+            // The dark screen catches clicks, so none reach the level beneath.
+            var dark = MenuSetup.FullScreenImage(canvasObject.transform, "Panel", new Color(0f, 0f, 0f, 0.65f));
+            dark.raycastTarget = true;
+            pause.panel = dark.gameObject;
+
+            var column = new GameObject("Buttons", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+            column.transform.SetParent(dark.transform, false);
+            var columnRect = (RectTransform)column.transform;
+            columnRect.anchorMin = columnRect.anchorMax = columnRect.pivot = new Vector2(0.5f, 0.5f);
+            columnRect.anchoredPosition = Vector2.zero;
+            var layout = column.GetComponent<VerticalLayoutGroup>();
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.spacing = MenuSetup.Spacing; // apart, as on the main menu
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = layout.childForceExpandHeight = false;
+            var fit = column.GetComponent<ContentSizeFitter>();
+            fit.horizontalFit = fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Wide enough for "Back to the menu" on the stone's flat top.
+            var size = new Vector2(400f, 272f);
+            pause.resumeButton = MenuSetup.MakeButton(column.transform, "Resume", "ادامه", stone, size, 40);
+            pause.menuButton = MenuSetup.MakeButton(column.transform, "Back to the menu", "بازگشت به منو", stone, size, 34);
+            MenuSetup.LinkUpAndDown(pause.resumeButton, pause.menuButton);
+            dark.gameObject.SetActive(false);
         }
 
         // The clips in Assets/Audio whose names start with prefix, in name order (take 01, 02, ...).
@@ -348,7 +429,26 @@ namespace Farhad.EditorTools
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
-        static Sprite MakeSprite(string name, Texture2D texture)
+        // A picture for the IMGUI HUD, kept small and smooth. Null if it doesn't exist.
+        static Texture2D IconArt(string path)
+        {
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null)
+            {
+                Debug.LogWarning($"No HUD icon at {path}.");
+                return null;
+            }
+            importer.textureType = TextureImporterType.Default;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = true;
+            importer.maxTextureSize = 256;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.filterMode = FilterMode.Trilinear;
+            importer.SaveAndReimport();
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        static Sprite MakeSprite(string name, Texture2D texture, Vector4 border = default)
         {
             string path = $"{ArtDir}/{name}.png";
             File.WriteAllBytes(path, texture.EncodeToPNG());
@@ -364,6 +464,7 @@ namespace Farhad.EditorTools
             importer.wrapMode = TextureWrapMode.Clamp;
             importer.filterMode = FilterMode.Bilinear;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.spriteBorder = border;
             var settings = new TextureImporterSettings();
             importer.ReadTextureSettings(settings);
             settings.spriteMeshType = SpriteMeshType.FullRect;
@@ -439,6 +540,75 @@ namespace Farhad.EditorTools
             }
             tex.Apply();
             return tex;
+        }
+
+        // 64x64 px key cap: pale stone, a dark rim, a deeper lip along the bottom. Sliced, it
+        // stretches into the space bar.
+        static Texture2D KeyCapTexture()
+        {
+            const int size = 64;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var rim = new Color(0.12f, 0.1f, 0.1f);
+            var lip = new Color(0.62f, 0.58f, 0.54f);
+            var top = new Color(0.93f, 0.9f, 0.85f);
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float outer = RoundedBox(x, y, 0f, 0f, size, size, 12f);
+                float face = RoundedBox(x, y, 3f, 8f, size - 3f, size - 3f, 9f);
+                var c = Color.Lerp(Color.Lerp(rim, lip, Mathf.Clamp01(outer - 2.5f)), top, Mathf.Clamp01(face));
+                c.a = Mathf.Clamp01(outer);
+                tex.SetPixel(x, y, c);
+            }
+            tex.Apply();
+            return tex;
+        }
+
+        // 68x92 px mouse, its left button lit; or, for scrolling, its wheel lit with an arrow
+        // pointing down below it.
+        static Texture2D MouseTexture(bool scroll)
+        {
+            const int w = 68, h = 92;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var rim = new Color(0.12f, 0.1f, 0.1f);
+            var body = new Color(0.93f, 0.9f, 0.85f);
+            var lit = new Color(1f, 0.72f, 0.3f);
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float outer = RoundedBox(x, y, 0f, 0f, w, h, 32f);
+                float inner = RoundedBox(x, y, 4f, 4f, w - 4f, h - 4f, 28f);
+                bool button = y > h * 0.55f;
+                bool seam = button && Mathf.Abs(x + 0.5f - w * 0.5f) < 2f || Mathf.Abs(y + 0.5f - h * 0.55f) < 2f;
+                var fill = seam ? rim : button && x < w / 2 && !scroll ? lit : body;
+                if (scroll)
+                {
+                    float px = x + 0.5f - w * 0.5f, py = y + 0.5f;
+                    // The wheel, in the seam between the buttons.
+                    float wheel = RoundedBox(x, y, w * 0.5f - 6f, h * 0.62f, w * 0.5f + 6f, h * 0.88f, 6f);
+                    if (wheel > 0f) fill = Color.Lerp(rim, lit, Mathf.Clamp01(wheel - 1f));
+                    // A down arrow on the body: a shaft and a head.
+                    bool shaft = Mathf.Abs(px) < 3f && py > h * 0.24f && py < h * 0.44f;
+                    bool head = py > h * 0.12f && py < h * 0.27f && Mathf.Abs(px) < (py - h * 0.12f) * 0.9f;
+                    if (shaft || head) fill = lit;
+                }
+                var c = Color.Lerp(rim, fill, Mathf.Clamp01(inner));
+                c.a = Mathf.Clamp01(outer);
+                tex.SetPixel(x, y, c);
+            }
+            tex.Apply();
+            return tex;
+        }
+
+        // How far pixel (x, y) is inside a box with rounded corners, in pixels (clamped to 0..1
+        // gives smooth edges).
+        static float RoundedBox(int x, int y, float xMin, float yMin, float xMax, float yMax, float radius)
+        {
+            float px = x + 0.5f, py = y + 0.5f;
+            float dx = Mathf.Max(xMin + radius - px, px - (xMax - radius), 0f);
+            float dy = Mathf.Max(yMin + radius - py, py - (yMax - radius), 0f);
+            float edge = Mathf.Min(Mathf.Min(px - xMin, xMax - px), Mathf.Min(py - yMin, yMax - py));
+            return dx > 0f || dy > 0f ? radius - Mathf.Sqrt(dx * dx + dy * dy) : edge;
         }
 
         static Texture2D BeaconTexture()

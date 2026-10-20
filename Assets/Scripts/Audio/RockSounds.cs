@@ -23,31 +23,18 @@ namespace Farhad
         [Tooltip("How much each echo loses its brightness as it carries through the rock.")]
         [Range(0f, 1f)] public float callEchoDamping = 0.5f;
 
-        [Header("Farhad's voice when he strikes")]
-        [Tooltip("Before his second call to Shirin.")]
-        public AudioClip[] freshGrunts;
-        [Tooltip("After his second call, before the third.")]
-        public AudioClip[] strainedGrunts;
-        [Tooltip("After his third call.")]
-        public AudioClip[] tiredGrunts;
-        [Range(0f, 1f)] public float gruntVolume = 1f;
-        [Tooltip("Random pitch change on each grunt, so repeats don't sound identical.")]
-        [Range(0f, 0.2f)] public float gruntPitchVariation = 0.03f;
-
-        // Each voice plays on its own source: a source's pitch applies to everything it is playing, so the
-        // rock's pitch wobble or a grunt's would otherwise bend a call that is still echoing.
-        AudioSource source, callSource, gruntSource;
+        // His voice plays on its own source: a source's pitch applies to everything it is playing, so the
+        // rock's pitch wobble would otherwise bend a call that is still echoing.
+        AudioSource source, callSource;
         AudioClip solidHit, hollowHit, rockBreak, rumble, rockfall, call;
         AudioClip[] echoedTakes;
         int callsMade;
-        AudioClip lastGrunt;
         readonly System.Random noise = new(7);
 
         void Awake()
         {
             source = GetComponent<AudioSource>();
             callSource = AddVoiceSource();
-            gruntSource = AddVoiceSource();
 
             // The echo is baked into copies of the takes rather than put on the AudioSource, so only his
             // voice echoes and the tail isn't cut off when the clip ends.
@@ -84,22 +71,6 @@ namespace Farhad
         {
             Play(rock == RockType.Hollow ? hollowHit : solidHit, 0.9f);
             if (broke) Play(rockBreak, 0.6f);
-        }
-
-        // He tires as he calls: the grunts change after his second and third calls.
-        public void PlayGrunt()
-        {
-            var grunts = callsMade >= 3 ? tiredGrunts : callsMade == 2 ? strainedGrunts : freshGrunts;
-            if (grunts == null || grunts.Length == 0) return;
-
-            // A random one, but not the same one twice in a row.
-            var grunt = grunts[UnityEngine.Random.Range(0, grunts.Length)];
-            if (grunt == lastGrunt && grunts.Length > 1)
-                grunt = grunts[(Array.IndexOf(grunts, grunt) + UnityEngine.Random.Range(1, grunts.Length)) % grunts.Length];
-            lastGrunt = grunt;
-
-            gruntSource.pitch = 1f + UnityEngine.Random.Range(-gruntPitchVariation, gruntPitchVariation);
-            gruntSource.PlayOneShot(grunt, gruntVolume);
         }
 
         // severity: 0..1, how close the mountain is to collapsing.

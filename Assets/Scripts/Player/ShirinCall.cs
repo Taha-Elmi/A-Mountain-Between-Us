@@ -26,6 +26,8 @@ namespace Farhad
 
         public int CallsLeft { get; private set; }
         public float LastCallTime { get; private set; } = float.NegativeInfinity;
+        // When he last tried to call her with no calls left.
+        public float LastSpentCallTime { get; private set; } = float.NegativeInfinity;
         public bool IsRevealing => Time.time < LastCallTime + revealDuration;
 
         FarhadController farhad;
@@ -39,8 +41,9 @@ namespace Farhad
         void Update()
         {
             var kb = Keyboard.current;
-            if (kb == null || farhad.IsDead || CallsLeft <= 0) return;
-            if (kb[callKey].wasPressedThisFrame) Call();
+            if (kb == null || farhad.IsDead || PauseMenu.Paused || !kb[callKey].wasPressedThisFrame) return;
+            if (CallsLeft > 0) Call();
+            else LastSpentCallTime = Time.time;
         }
 
         void Call()

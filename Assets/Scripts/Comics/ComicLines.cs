@@ -158,7 +158,7 @@ namespace Farhad
         // Breaks the text into rows no wider than maxWidth, as evenly as it can (the narrowest
         // width that needs no more rows), and returns them in drawing order. A row break in the
         // text always starts a new row.
-        static List<string> Wrap(string text, bool rtl, float maxWidth, Func<string, float> measure, out float width)
+        public static List<string> Wrap(string text, bool rtl, float maxWidth, Func<string, float> measure, out float width)
         {
             var paragraphs = new List<string[]>();
             foreach (string paragraph in text.Split('\n'))

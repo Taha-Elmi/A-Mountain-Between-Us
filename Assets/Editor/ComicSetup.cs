@@ -32,6 +32,8 @@ namespace Farhad.EditorTools
         const string PersianFontPath = "Assets/Art/Fonts/Vazirmatn-Regular.ttf";
         const string EnglishFontPath = "Assets/Art/Fonts/Vazirmatn-Regular.ttf";
         const string PreviewDir = "ComicPreviews";
+        // The closing comic's song, from leaving the mountain until the main menu.
+        const string OutroMusicPath = "Assets/Audio/Music/Kalhor_Baad_Part3.mp3";
         static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg", ".psd", ".tga", ".tif", ".tiff" };
 
         // A page image: any image in a folder under ComicsDir.
@@ -219,6 +221,8 @@ namespace Farhad.EditorTools
             player.hint = hint;
 
             player.blackout = FullScreenImage(canvasObject.transform, "Blackout", Color.black);
+
+            if (name == "Outro") MenuSetup.AddMusic(OutroMusicPath);
 
             string path = $"{ScenesDir}/Comic{name}.unity";
             EditorSceneManager.SaveScene(scene, path);

@@ -107,6 +107,7 @@ namespace Farhad
                 yield return TurnTo(next, step < 0);
             }
 
+            SceneMusic.Leaving(string.IsNullOrEmpty(nextScene) ? null : nextScene, fadeSeconds);
             yield return Fade(blackout, 0f, 1f, fadeSeconds);
             LoadNextScene();
         }

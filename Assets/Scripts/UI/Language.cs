@@ -5,8 +5,8 @@ namespace Farhad
 {
     public enum Lang { Persian, English }
 
-    // The language the game's words are shown in. Persian unless the player picked another;
-    // the choice is remembered between runs. The settings screen will set Current.
+    // The language the game's words are shown in. Persian unless the player picked another on the
+    // menu's Language stone; the choice is remembered between runs.
     public static class Language
     {
         const string PrefsKey = "language";
@@ -26,5 +26,9 @@ namespace Farhad
         }
 
         public static bool RightToLeft => Current == Lang.Persian;
+
+        // One line in the chosen language, ready for Unity to draw: Persian joined and in drawing order.
+        public static string Words(string english, string persian) =>
+            RightToLeft ? PersianText.Visual(PersianText.Shape(persian)) : english;
     }
 }

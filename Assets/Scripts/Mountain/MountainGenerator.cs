@@ -30,7 +30,7 @@ namespace Farhad
         public Vector2Int exit = new(-1, -1);
 
         [Header("Hollow rock")]
-        [Tooltip("Lay the hollow rock out anew every time the level loads. Off: keep the layout saved in the scene.")]
+        [Tooltip("Lay the hollow rock out anew for every run (retries keep it). Off: keep the layout saved in the scene.")]
         public bool randomizeOnPlay = true;
         [Tooltip("The layout saved in the scene when the mountain is built. Each random layout is logged with its seed.")]
         public int seed = 1405;
@@ -60,9 +60,14 @@ namespace Farhad
 
         void Awake()
         {
+            // The scene saves each rock cell's sprite, but a PictureTile's squares are cut at runtime
+            // and never saved, so a built level loads with every cell blank. Ask the tiles again.
+            rockMap.RefreshAllTiles();
+
+            // A retry after a rockfall keeps this run's layout; only a fresh run gets a new one.
+            bool retry = DigRun.Enter();
             if (!randomizeOnPlay) return;
-            int playSeed = new System.Random().Next();
-            if (Relayout(playSeed)) Debug.Log($"Mountain laid out with seed {playSeed}.", this);
+            if (Relayout(DigRun.Seed) && !retry) Debug.Log($"Mountain laid out with seed {DigRun.Seed}.", this);
         }
 
         // The made-up mountain: a cliff-faced block.

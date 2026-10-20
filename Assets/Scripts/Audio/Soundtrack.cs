@@ -44,6 +44,7 @@ namespace Farhad
             source.playOnAwake = false;
             source.spatialBlend = 0f;
             source.volume = volume;
+            source.ignoreListenerPause = true; // plays on under the pause menu
             goal = FindAnyObjectByType<GoalZone>();
             if (music != null) source.PlayDelayed(startDelay);
         }
